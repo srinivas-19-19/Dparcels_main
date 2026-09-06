@@ -1,0 +1,320 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// -----------------------------------------
+// AUTHENTICATION & USERS
+// -----------------------------------------
+
+enum Role {
+  CUSTOMER
+  RIDER
+  ADMIN
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+  DEACTIVATED
+}
+
+model User {
+  id       String        @id @default(uuid())
+  email    String        @unique
+  password String
+  googleId String?       @unique
+  role     Role          @default(CUSTOMER)
+  status   AccountStatus @default(ACTIVE)
+  fcmToken String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  customerProfile CustomerProfile?
+  riderProfile    RiderProfile?
+  refreshTokens   RefreshToken[]
+  notifications   Notification[]
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  revoked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model CustomerProfile {
+  id        String  @id @default(uuid())
+  userId    String  @unique
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName String
+  lastName  String
+  phone     String?
+  rating    Float   @default(5.0)
+
+  addresses      Address[]
+  orders         Order[]
+  supportTickets SupportTicket[]
+}
+
+model RiderProfile {
+  id            String  @id @default(uuid())
+  userId        String  @unique
+  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName     String
+  lastName      String
+  phone         String
+  vehicleType   String
+  vehicleNumber String
+  isOnline      Boolean @default(false)
+  isApproved    Boolean @default(false)
+  rating        Float   @default(5.0)
+  upiId         String?
+  paymentQrUrl  String?
+  utrNumber     String?
+
+  assignments     RiderAssignment[]
+  ordersDelivered Order[] // Orders directly handled by this rider
+}
+
+// -----------------------------------------
+// LOCATIONS & ADDRESSES
+// -----------------------------------------
+
+model Address {
+  id                String          @id @default(uuid())
+  customerProfileId String
+  customer          CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  label             String // e.g., "Home", "Office"
+  streetAddress     String
+  city              String
+  state             String
+  postalCode        String
+  country           String
+  latitude          Float
+  longitude         Float
+  providerPlaceId   String? // Abstracted Map Provider Place ID
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// -----------------------------------------
+// ORDERS & DELIVERY
+// -----------------------------------------
+
+enum OrderStatus {
+  DRAFT
+  PAYMENT_PENDING
+  CONFIRMED
+  ASSIGNING
+  RIDER_ASSIGNED
+  ACCEPTED
+  ARRIVED_PICKUP
+  PICKED_UP
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
+  FAILED
+}
+
+model Order {
+  id                String          @id @default(uuid())
+  idempotencyKey    String?         @unique // To prevent duplicate order creation
+  trackingId        String          @unique // Human readable e.g., DPARC-1234
+  customerProfileId String
+  customer          CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Restrict)
+
+  // Addresses (denormalized)
+  pickupAddress String
+  pickupLat     Float
+  pickupLng     Float
+
+  dropAddress String
+  dropLat     Float
+  dropLng     Float
+
+  distanceKm        Float
+  estimatedTimeMins Int
+  serviceType       String
+
+  status OrderStatus @default(DRAFT)
+
+  // Pricing
+  basePrice     Float
+  distancePrice Float
+  totalAmount   Float
+
+  riderProfileId String?
+  rider          RiderProfile? @relation(fields: [riderProfileId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  events       OrderEvent[]
+  payment      Payment?
+  assignments  RiderAssignment[]
+  couponUsages CouponUsage[]
+  Review       Review?
+}
+
+model OrderEvent {
+  id      String @id @default(uuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  previousStatus OrderStatus?
+  newStatus      OrderStatus
+
+  actorId   String? // null if system generated
+  actorRole String? // 'SYSTEM', 'CUSTOMER', 'RIDER', 'ADMIN'
+
+  description String?
+  latitude    Float?
+  longitude   Float?
+  metadata    Json? // Flexible JSON for additional audit data
+
+  createdAt DateTime @default(now())
+}
+
+// -----------------------------------------
+// RIDER ASSIGNMENTS
+// -----------------------------------------
+
+enum AssignmentStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+model RiderAssignment {
+  id             String           @id @default(uuid())
+  orderId        String
+  order          Order            @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  riderProfileId String
+  rider          RiderProfile     @relation(fields: [riderProfileId], references: [id], onDelete: Restrict)
+  status         AssignmentStatus @default(PENDING)
+  assignedAt     DateTime         @default(now())
+  respondedAt    DateTime?
+}
+
+// -----------------------------------------
+// PAYMENTS & BILLING
+// -----------------------------------------
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+model Payment {
+  id             String        @id @default(uuid())
+  idempotencyKey String?       @unique // To prevent double charging
+  orderId        String        @unique
+  order          Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  amount         Float
+  currency       String        @default("INR")
+  status         PaymentStatus @default(PENDING)
+  providerId     String? // e.g., Stripe PaymentIntent ID
+  paymentMethod  String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+
+
+model CouponUsage {
+  id         String   @id @default(uuid())
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  couponCode String
+  discount   Float
+  createdAt  DateTime @default(now())
+}
+
+// -----------------------------------------
+// SUPPORT & NOTIFICATIONS
+// -----------------------------------------
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+model SupportTicket {
+  id                String          @id @default(uuid())
+  customerProfileId String
+  customer          CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Restrict)
+  subject           String
+  status            TicketStatus    @default(OPEN)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  messages SupportMessage[]
+}
+
+model SupportMessage {
+  id              String        @id @default(uuid())
+  supportTicketId String
+  ticket          SupportTicket @relation(fields: [supportTicketId], references: [id], onDelete: Restrict)
+  senderId        String
+  senderRole      Role
+  message         String
+  createdAt       DateTime      @default(now())
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  body      String
+  isRead    Boolean  @default(false)
+  type      String
+  createdAt DateTime @default(now())
+}
+
+// -----------------------------------------
+// CMS & DASHBOARD
+// -----------------------------------------
+
+model Banner {
+  id        String   @id @default(uuid())
+  imageUrl  String
+  title     String?
+  linkUrl   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+// -----------------------------------------
+// REVIEWS
+// -----------------------------------------
+
+model Review {
+  id         String   @id @default(uuid())
+  orderId    String   @unique
+  order      Order    @relation(fields: [orderId], references: [id])
+  customerId String
+  riderId    String
+  rating     Int
+  feedback   String?
+  createdAt  DateTime @default(now())
+}

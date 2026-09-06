@@ -1,0 +1,317 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap');
+
+:root {
+  /* Premium Orange Color Palette */
+  --primary-orange: #FF8A00;
+  --orange-light: #FF9F1C;
+  --orange-dark: #E86F00;
+  --bg-primary: #070707;
+  --bg-card: #111111;
+  --bg-secondary: #181818;
+  --text-primary: #FFFFFF;
+  --text-secondary: #A0A0A0;
+  --border: #2A2A2A;
+  --orange-glow: rgba(255, 138, 0, 0.25);
+  --orange-glow-lg: rgba(255, 138, 0, 0.35);
+
+  /* Aliases for backwards compatibility */
+  --bg-dark: #070707;
+  --bg-card-hover: #181818;
+  --bg-input: #111111;
+  --bg-input-focus: #181818;
+  
+  --primary-yellow: #FF8A00;
+  --primary-yellow-hover: #FF9F1C;
+  --primary-yellow-glow: rgba(255, 138, 0, 0.25);
+  --primary-yellow-glow-lg: rgba(255, 138, 0, 0.35);
+  
+  --text-main: #FFFFFF;
+  --text-muted: #A0A0A0;
+  --text-dark: #000000;
+  
+  --border-subtle: #2A2A2A;
+  --border-focus: #FF8A00;
+  --border-error: #EF4444;
+
+  --status-success: #10B981;
+  --status-warning: #F59E0B;
+
+  --font-main: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-heading: 'Outfit', 'Plus Jakarta Sans', sans-serif;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
+
+  --shadow-card: 0 12px 32px rgba(0, 0, 0, 0.6);
+  --shadow-glow: 0 8px 25px var(--orange-glow);
+}
+
+/* Light Mode Global Theme Overrides */
+body.theme-light {
+  --bg-primary: #F8FAFC !important;
+  --bg-card: #FFFFFF !important;
+  --bg-secondary: #F1F5F9 !important;
+  --text-primary: #0F172A !important;
+  --text-secondary: #475569 !important;
+  --border: #CBD5E1 !important;
+  --border-subtle: #E2E8F0 !important;
+  --bg-input: #F8FAFC !important;
+  --text-main: #0F172A !important;
+  --text-muted: #64748B !important;
+  --bg-dark: #F8FAFC !important;
+}
+
+/* Dark Mode Global Theme Overrides - Dark Navy + Dark Blue-Gray Cards + Orange Accents */
+body.theme-dark {
+  --bg-primary: #060B13 !important;
+  --bg-card: #121D2D !important;
+  --bg-secondary: #1A273B !important;
+  --text-primary: #F8FAFC !important;
+  --text-secondary: #94A3B8 !important;
+  --border: #1F2E45 !important;
+  --border-subtle: #182436 !important;
+  --bg-input: #0E1726 !important;
+  --text-main: #F8FAFC !important;
+  --text-muted: #94A3B8 !important;
+  --bg-dark: #060B13 !important;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  min-height: 100vh;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-main);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* Ambient Orange Gradient Background */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 100vw;
+  height: 100vh;
+  background: radial-gradient(
+    circle at top right,
+    rgba(255, 138, 0, 0.08),
+    transparent 35%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Scrollbar customization */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: var(--radius-full);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--primary-orange);
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Typography Helpers */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.text-orange, .text-yellow {
+  color: var(--primary-orange) !important;
+}
+
+.bg-orange, .bg-yellow {
+  background-color: var(--primary-orange) !important;
+}
+
+/* Global App Shell Layout */
+.app-container {
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  background: radial-gradient(circle at 50% 0%, rgba(255, 138, 0, 0.08) 0%, rgba(7, 7, 7, 1) 70%);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 440px;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px 24px;
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(10px);
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.auth-card:hover {
+  border-color: rgba(255, 138, 0, 0.45);
+  box-shadow: 0 10px 30px rgba(255, 138, 0, 0.08);
+}
+
+.auth-card-wide {
+  max-width: 580px;
+}
+
+@media (max-width: 480px) {
+  .app-container {
+    padding: 16px 12px;
+  }
+  .auth-card {
+    padding: 22px 18px;
+    border-radius: var(--radius-lg);
+  }
+}
+
+/* Button Global Styles */
+button.primary-orange-btn {
+  background: linear-gradient(135deg, #FF8A00 0%, #FF5500 100%);
+  color: #FFFFFF;
+  border-radius: 14px;
+  border: none;
+  font-weight: 800;
+  box-shadow: 0 8px 25px rgba(255, 122, 0, 0.35);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+}
+
+button.primary-orange-btn:hover {
+  background: linear-gradient(135deg, #FF9500 0%, #FF6600 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 30px rgba(255, 122, 0, 0.5);
+}
+
+button.primary-orange-btn:active {
+  transform: scale(0.98);
+}
+
+/* Input Global Focus Styles */
+input, select, textarea {
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: var(--primary-orange) !important;
+  box-shadow: 0 0 0 3px rgba(255, 138, 0, 0.12) !important;
+  outline: none;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 15px var(--orange-glow);
+  }
+  50% {
+    box-shadow: 0 0 25px var(--orange-glow-lg);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-spin {
+  animation: spin 0.8s linear infinite;
+}
+
+.pulse-glow {
+  animation: pulseGlow 2.5s infinite;
+}
+
+/* ================= RESPONSIVE DEVICE LAYOUT MEDIA QUERIES ================= */
+.responsive-phone-frame {
+  width: 100%;
+  max-width: 430px;
+  height: 100vh;
+  max-height: 920px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.9);
+  transition: all 0.3s ease;
+}
+
+/* Mobile Screen Viewport (<= 480px): Fits Mobile Viewport Perfectly */
+@media (max-width: 480px) {
+  .responsive-phone-frame {
+    max-width: 100% !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+}
+
+/* Tablet Screen Viewport (481px to 1023px) */
+@media (min-width: 481px) and (max-width: 1023px) {
+  .responsive-phone-frame {
+    max-width: 520px !important;
+    height: 94vh !important;
+    max-height: 920px !important;
+    border-radius: 24px !important;
+  }
+}
+
+/* Desktop & Laptop Viewport (>= 1024px) */
+@media (min-width: 1024px) {
+  .responsive-phone-frame {
+    max-width: 580px !important;
+    height: 92vh !important;
+    max-height: 900px !important;
+    border-radius: 28px !important;
+  }
+}

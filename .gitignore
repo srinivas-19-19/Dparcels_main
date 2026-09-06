@@ -1,0 +1,11 @@
+node_modules/
+**/node_modules/
+.env
+**/.env
+dist/
+**/dist/
+build/
+**/build/
+.DS_Store
+.vscode/
+firebase-adminsdk.json

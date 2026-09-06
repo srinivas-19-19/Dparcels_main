@@ -1,0 +1,73 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  /* Exact User Specified Orange Palette (#FF6B00) */
+  --primary-orange: #FF6B00;
+  --primary-orange-hover: #E05D00;
+  --primary-orange-light: #FF8533;
+  --background: #050505;
+  --card-background: #0D0A08;
+  --secondary-background: #15100C;
+  --text-primary: #FFFFFF;
+  --text-secondary: #A8A8A8;
+  --text-muted: #6E6E6E;
+  --border-orange: rgba(255, 107, 0, 0.25);
+  --orange-glow: rgba(255, 107, 0, 0.35);
+
+  /* Global Compatibility Mappings */
+  --bg-color: #050505;
+  --card-bg-1: #0D0A08;
+  --card-bg-2: #15100C;
+  --primary-yellow: #FF6B00;
+  --primary-yellow-hover: #E05D00;
+  --primary-yellow-glow: rgba(255, 107, 0, 0.35);
+  --text-white: #FFFFFF;
+  --border-dark: #1E1712;
+  --border-focus: #FF6B00;
+  --input-bg: #080605;
+
+  --success: #22C55E;
+  --success-bg: rgba(34, 197, 94, 0.12);
+  --error: #EF4444;
+  --error-bg: rgba(239, 68, 68, 0.12);
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+
+  --font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --shadow-main: 0 20px 40px -15px rgba(0, 0, 0, 0.85);
+  --shadow-glow: 0 10px 30px -5px rgba(255, 107, 0, 0.35);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  outline: none;
+}
+
+input, select, textarea {
+  font-family: inherit;
+}
