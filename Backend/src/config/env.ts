@@ -31,6 +31,11 @@ const envSchema = z.object({
   GOOGLE_MAPS_API_KEY: z.string().optional().default('mock-google-maps-key'),
   GOOGLE_CLIENT_ID: z.string().optional().default(''),
   GOOGLE_CLIENT_SECRET: z.string().optional().default(''),
+
+  // Supabase Storage
+  SUPABASE_URL: z.string().default('https://varaknziajhgiotxmodl.supabase.co'),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().optional().default(''),
+  SUPABASE_AVATAR_BUCKET: z.string().default('customer-avatars'),
 });
 
 const _env = envSchema.safeParse(process.env);

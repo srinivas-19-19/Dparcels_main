@@ -9,6 +9,13 @@
     "delete-user": "npx tsx src/scripts/delete-user.ts",
     "clear-users": "npx tsx src/scripts/clear-users.ts",
     "test:otp": "npx tsx src/services/otp/otp.unit.test.ts",
+    "test:customers": "npx tsx src/modules/customers/customers.integration.test.ts",
+    "test:addresses": "npx tsx src/modules/addresses/addresses.integration.test.ts",
+    "test:dashboard": "npx tsx src/modules/customers/homeDashboard.integration.test.ts",
+    "test:pricing": "npx tsx src/modules/pricing/pricing.integration.test.ts",
+    "test:orders": "npx tsx src/modules/orders/orders.integration.test.ts",
+    "test:orderDetails": "npx tsx src/modules/orders/orderDetails.integration.test.ts",
+    "test:payments": "npx tsx src/modules/payments/payments.integration.test.ts",
     "build": "npx -p typescript tsc",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -18,6 +25,7 @@
   "type": "commonjs",
   "dependencies": {
     "@googlemaps/google-maps-services-js": "^3.4.2",
+    "@supabase/supabase-js": "^2.116.0",
     "bcryptjs": "^3.0.3",
     "bullmq": "^6.3.1",
     "cors": "^2.8.6",

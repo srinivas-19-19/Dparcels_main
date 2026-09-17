@@ -154,6 +154,16 @@ export const AuthServices = {
       throw new CustomError('User already exists.', 400);
     }
 
+    if (data.otp) {
+      await otpService.verifyOtp({
+        email,
+        otp: data.otp,
+        purpose: 'EMAIL_VERIFICATION'
+      });
+    } else {
+      throw new CustomError('OTP is required for registration.', 400);
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await prisma.$transaction(async (tx: any) => {
@@ -303,7 +313,7 @@ export const AuthServices = {
     });
 
     if (user) {
-      if (!user.googleId) {
+      if (!(user as any).googleId) {
         user = await prisma.user.update({
           where: { id: user.id },
           data: { googleId: googleSub },
@@ -418,7 +428,7 @@ export const AuthServices = {
   },
 
   async getMe(userId: string) {
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
@@ -429,6 +439,23 @@ export const AuthServices = {
         riderProfile: true,
       },
     });
+
+    if (user && user.role === 'CUSTOMER' && !user.customerProfile) {
+      const profile = await prisma.customerProfile.create({
+        data: {
+          userId: user.id,
+          firstName: 'Customer',
+          lastName: '',
+          preferredLanguage: 'en',
+          theme: 'dark',
+        },
+      });
+      user = {
+        ...user,
+        customerProfile: profile,
+      };
+    }
+
     return user;
   },
 

@@ -20,6 +20,13 @@ export const NotificationsService = {
     });
   },
 
+  async markAllAsRead(userId: string) {
+    return prisma.notification.updateMany({
+      where: { userId, isRead: false },
+      data: { isRead: true }
+    });
+  },
+
   async createNotification(userId: string, title: string, message: string) {
     const notification = await prisma.notification.create({
       data: {

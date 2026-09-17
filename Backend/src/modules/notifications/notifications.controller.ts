@@ -26,3 +26,15 @@ export const markAsReadController = async (req: Request, res: Response) => {
     return sendError(res, 400, error.message || 'Failed to mark notification as read');
   }
 };
+
+export const markAllAsReadController = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return sendError(res, 401, 'Unauthorized');
+
+    const result = await NotificationsService.markAllAsRead(userId);
+    return sendSuccess(res, 200, result, 'All notifications marked as read');
+  } catch (error: any) {
+    return sendError(res, 500, error.message || 'Failed to mark notifications as read');
+  }
+};

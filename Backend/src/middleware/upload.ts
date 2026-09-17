@@ -30,3 +30,24 @@ export const uploadBanner = multer({
   fileFilter,
   limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
 });
+
+// Memory storage for customer avatar uploads (Supabase Storage only, no local filesystem)
+const avatarMemoryStorage = multer.memoryStorage();
+
+const avatarFileFilter = (req: any, file: any, cb: any) => {
+  const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+  if (allowed.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid image format. Only JPEG, PNG, and WebP are allowed.'), false);
+  }
+};
+
+export const uploadAvatarMemory = multer({
+  storage: avatarMemoryStorage,
+  fileFilter: avatarFileFilter,
+  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+});
+
+export const uploadQrMemory = uploadAvatarMemory;
+

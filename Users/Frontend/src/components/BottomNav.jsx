@@ -12,6 +12,7 @@ export const BottomNav = ({ activeTab, onSelectTab }) => {
         title="Home"
       >
         <i className="fa-solid fa-house"></i>
+        <span className="nav-label">Home</span>
       </div>
       <div
         className={`nav-item ${activeTab === 'orders' ? 'active' : ''}`}
@@ -19,6 +20,7 @@ export const BottomNav = ({ activeTab, onSelectTab }) => {
         title="Orders"
       >
         <i className="fa-solid fa-clock-rotate-left"></i>
+        <span className="nav-label">Orders</span>
       </div>
       <div
         className={`nav-item ${activeTab === 'support' ? 'active' : ''}`}
@@ -26,6 +28,7 @@ export const BottomNav = ({ activeTab, onSelectTab }) => {
         title="Support"
       >
         <i className="fa-solid fa-headset"></i>
+        <span className="nav-label">Support</span>
       </div>
       <div
         className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`}
@@ -33,6 +36,7 @@ export const BottomNav = ({ activeTab, onSelectTab }) => {
         title="Settings"
       >
         <i className="fa-solid fa-gear"></i>
+        <span className="nav-label">Settings</span>
       </div>
       <div
         className="nav-item nav-logout"
@@ -40,6 +44,7 @@ export const BottomNav = ({ activeTab, onSelectTab }) => {
         title="Logout"
       >
         <i className="fa-solid fa-arrow-right-from-bracket"></i>
+        <span className="nav-label">Logout</span>
       </div>
     </nav>
   );

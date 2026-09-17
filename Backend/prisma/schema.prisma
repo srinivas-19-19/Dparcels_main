@@ -54,13 +54,18 @@ model RefreshToken {
 }
 
 model CustomerProfile {
-  id        String  @id @default(uuid())
-  userId    String  @unique
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  firstName String
-  lastName  String
-  phone     String?
-  rating    Float   @default(5.0)
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  firstName         String
+  lastName          String
+  phone             String?
+  profileImage      String?
+  preferredLanguage String   @default("en")
+  theme             String   @default("dark")
+  rating            Float    @default(5.0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @default(now()) @updatedAt
 
   addresses      Address[]
   orders         Order[]
@@ -104,6 +109,7 @@ model Address {
   latitude          Float
   longitude         Float
   providerPlaceId   String? // Abstracted Map Provider Place ID
+  isDefault         Boolean         @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -148,6 +154,10 @@ model Order {
   distanceKm        Float
   estimatedTimeMins Int
   serviceType       String
+  packageCategory   String?
+  storeName         String?
+  items             Json?
+  instructions      String?
 
   status OrderStatus @default(DRAFT)
 
@@ -236,8 +246,6 @@ model Payment {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 }
-
-
 
 model CouponUsage {
   id         String   @id @default(uuid())

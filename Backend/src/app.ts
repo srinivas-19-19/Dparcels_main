@@ -12,6 +12,10 @@ import supportRoutes from './modules/support/support.routes';
 import couponsRoutes from './modules/coupons/coupons.routes';
 import notificationsRoutes from './modules/notifications/notifications.routes';
 import bannersRoutes from './modules/banners/banners.routes';
+import customerRoutes from './modules/customers/customers.routes';
+import addressRoutes from './modules/addresses/addresses.routes';
+import mapRoutes from './modules/maps/maps.routes';
+import paymentRoutes from './modules/payments/payments.routes';
 
 const app = express();
 
@@ -34,8 +38,12 @@ app.get('/health', async (req: Request, res: Response) => {
 
 // Routes
 app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/customers', customerRoutes);
+app.use('/api/v1/addresses', addressRoutes);
+app.use('/api/v1/maps', mapRoutes);
 app.use('/api/v1/pricing', pricingRoutes);
 app.use('/api/v1/orders', orderRoutes);
+app.use('/api/v1/payments', paymentRoutes);
 app.use('/api/v1/rider', riderRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/support', supportRoutes);

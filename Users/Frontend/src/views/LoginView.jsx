@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
-import { authenticateUserLocal, updateUserPasswordLocal } from '../utils/userRegistry';
 import { promptGoogleSignIn } from '../utils/googleAuth';
 
 export const LoginView = ({ onNavigateRegister }) => {
@@ -100,11 +99,9 @@ export const LoginView = ({ onNavigateRegister }) => {
         otp: forgotCode.join(''),
         newPassword
       });
-      updateUserPasswordLocal(forgotEmail, newPassword);
       setForgotStep('success');
     } catch (err) {
-      updateUserPasswordLocal(forgotEmail, newPassword);
-      setForgotStep('success');
+      setForgotError(err.response?.data?.message || 'Failed to reset password. Please try again.');
     } finally {
       setForgotLoading(false);
     }
@@ -125,19 +122,8 @@ export const LoginView = ({ onNavigateRegister }) => {
       const { user, accessToken } = response.data.data;
       login(user, accessToken);
     } catch (error) {
-      console.warn('Backend login notice, checking local user registry:', error);
-      
-      // Verify local user registry
-      const localRes = authenticateUserLocal(email || phone, password);
-      if (localRes.success) {
-        login(localRes.user, 'local-token-' + Date.now());
-      } else {
-        const rawMsg = error.response?.data?.message || localRes.message || 'Invalid email or password.';
-        const cleanMsg = (typeof rawMsg === 'string' && (rawMsg.includes('prisma') || rawMsg.includes('Authentication failed')))
-          ? 'Invalid email or password.'
-          : rawMsg;
-        setLoginError(cleanMsg);
-      }
+      const errorMsg = error.response?.data?.message || 'Invalid email or password.';
+      setLoginError(errorMsg);
     } finally {
       setIsAuthenticating(false);
     }

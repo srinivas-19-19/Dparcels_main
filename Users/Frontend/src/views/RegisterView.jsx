@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
-import { registerUserLocal, getRegisteredUsers } from '../utils/userRegistry';
 
 export const RegisterView = ({ onNavigateLogin }) => {
   const { login } = useAuth();
@@ -13,6 +12,8 @@ export const RegisterView = ({ onNavigateLogin }) => {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [resendTimer, setResendTimer] = useState(60);
   const [loading, setLoading] = useState(false);
+  const [role, setRole] = useState('CUSTOMER');
+  const [vehicle, setVehicle] = useState('BIKE');
   const [registerError, setRegisterError] = useState('');
 
   // Countdown timer for OTP Resend
@@ -100,45 +101,36 @@ export const RegisterView = ({ onNavigateLogin }) => {
     const lastName = nameParts.slice(1).join(' ') || firstName;
 
     try {
-      await api.post('/auth/register/customer', {
-        email,
-        phone,
-        password,
-        firstName,
-        lastName,
-        otp: otpString
-      });
+      if (role === 'CUSTOMER') {
+        await api.post('/auth/register/customer', {
+          email,
+          phone,
+          password,
+          firstName,
+          lastName,
+          otp: otpString
+        });
+      } else {
+        await api.post('/auth/register/rider', {
+          email,
+          mobile: phone,
+          password,
+          fullName: name,
+          vehicle,
+          otp: otpString
+        });
+      }
 
       // Send Welcome Email to user's mail address
       api.post('/auth/send-welcome', { email, name: firstName }).catch((e) => console.warn('Welcome email trigger notice:', e));
 
-      // Save account locally to guarantee instant login readiness
-      registerUserLocal({ email, phone, password, firstName, lastName });
       alert('Registration successful! Please login.');
       if (onNavigateLogin) {
         onNavigateLogin();
       }
     } catch (error) {
       const rawMsg = error.response?.data?.message || 'Invalid OTP. Please try again.';
-      const cleanMsg = (typeof rawMsg === 'string' && (rawMsg.includes('prisma') || rawMsg.includes('Invocation') || rawMsg.includes('credentials')))
-        ? 'Invalid OTP. Please try again.'
-        : rawMsg;
-      
-      console.warn('Registration verification notice:', error);
-      
-      // Send Welcome Email to user's mail address
-      api.post('/auth/send-welcome', { email, name: firstName }).catch((e) => console.warn('Welcome email trigger notice:', e));
-
-      // If server DB issue or local dev mode, save user locally and redirect to Login
-      if (!error.response || error.response.status >= 500 || (rawMsg.includes && rawMsg.includes('prisma'))) {
-        registerUserLocal({ email, phone, password, firstName, lastName });
-        alert('Registration successful! Please login.');
-        if (onNavigateLogin) {
-          onNavigateLogin();
-        }
-      } else {
-        setRegisterError(cleanMsg);
-      }
+      setRegisterError(rawMsg);
     } finally {
       setLoading(false);
     }
@@ -183,6 +175,21 @@ export const RegisterView = ({ onNavigateLogin }) => {
             <p className="subtitle" style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
               Sign up to request pickups and track live deliveries.
             </p>
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 20, marginBottom: 10 }}>
+              <div 
+                onClick={() => setRole('CUSTOMER')}
+                style={{ flex: 1, textAlign: 'center', padding: '10px 0', borderRadius: 8, cursor: 'pointer', fontWeight: 'bold', fontSize: 13, background: role === 'CUSTOMER' ? 'var(--primary-orange-light)' : 'rgba(255,255,255,0.05)', color: role === 'CUSTOMER' ? '#000' : 'var(--text-muted)' }}
+              >
+                CUSTOMER
+              </div>
+              <div 
+                onClick={() => setRole('RIDER')}
+                style={{ flex: 1, textAlign: 'center', padding: '10px 0', borderRadius: 8, cursor: 'pointer', fontWeight: 'bold', fontSize: 13, background: role === 'RIDER' ? 'var(--primary-orange-light)' : 'rgba(255,255,255,0.05)', color: role === 'RIDER' ? '#000' : 'var(--text-muted)' }}
+              >
+                DELIVERY PARTNER
+              </div>
+            </div>
 
             {registerError && (
               <div style={{ padding: '10px 14px', borderRadius: 10, background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#f87171', fontSize: 13, fontWeight: 700, marginTop: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -251,6 +258,26 @@ export const RegisterView = ({ onNavigateLogin }) => {
                   />
                 </div>
               </div>
+
+              {role === 'RIDER' && (
+                <div className="form-group">
+                  <label className="form-label">VEHICLE TYPE</label>
+                  <div className="input-wrapper" style={{ padding: '0 16px' }}>
+                    <i className="fa-solid fa-motorcycle"></i>
+                    <select
+                      className="input-control"
+                      value={vehicle}
+                      onChange={(e) => setVehicle(e.target.value)}
+                      style={{ background: 'transparent', border: 'none', color: 'var(--text-primary)', width: '100%', outline: 'none', cursor: 'pointer', marginLeft: 8 }}
+                      required
+                    >
+                      <option value="BIKE" style={{ background: 'var(--surface-dark)' }}>Bike</option>
+                      <option value="SCOOTER" style={{ background: 'var(--surface-dark)' }}>Scooter</option>
+                      <option value="CAR" style={{ background: 'var(--surface-dark)' }}>Car</option>
+                    </select>
+                  </div>
+                </div>
+              )}
 
               <button type="submit" className="btn-primary" style={{ marginTop: 20 }} disabled={loading}>
                 {loading ? 'CHECKING EMAIL...' : 'CREATE ACCOUNT →'}

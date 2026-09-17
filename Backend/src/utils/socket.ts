@@ -33,10 +33,22 @@ export const initSocket = (server: HttpServer) => {
 
     socket.join(socket.data.user.userId);
 
+    // Auto-join riders room if user has RIDER role
+    if (socket.data.user.role === 'RIDER') {
+      socket.join('riders');
+      logger.info(`[Socket] Rider ${socket.data.user.userId} joined 'riders' room`);
+    }
+
+    socket.on('join_riders', () => {
+      socket.join('riders');
+      logger.info(`[Socket] User ${socket.data.user.userId} explicitly joined 'riders' room`);
+    });
+
     socket.on('join_order', (orderId: string) => {
       socket.join(`order_${orderId}`);
       logger.info(`[Socket] User ${socket.data.user.userId} joined room order_${orderId}`);
     });
+
 
     socket.on('update_location', async (data: { orderId?: string; lat: number; lng: number }) => {
       if (socket.data.user.role !== 'RIDER') return;

@@ -18,7 +18,9 @@ import {
   Package,
   LogOut,
   TrendingUp,
-  ArrowUpRight
+  ArrowUpRight,
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react';
 import AdminRiders from './AdminRiders';
 import AdminOrders from './AdminOrders';
@@ -36,11 +38,14 @@ export default function AdminDashboard() {
   const [timeRange, setTimeRange] = useState('1M');
   const [stats, setStats] = useState({
     totalOrders: 0,
+    totalRevenue: 0,
     activeRiders: 0,
-    pendingRiders: 0,
-    totalRevenue: 0
+    pendingRiders: 0
   });
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
 
+  // Fetch dashboard stats on component mount (and when Overview tab is active)
   useEffect(() => {
     if (activeTab === 'Overview') {
       fetchStats();
@@ -48,11 +53,29 @@ export default function AdminDashboard() {
   }, [activeTab]);
 
   const fetchStats = async () => {
+    setIsLoading(true);
+    setError('');
     try {
       const res = await api.get('/admin/dashboard');
-      setStats(res.data.data);
+      const data = res.data?.data || res.data || {};
+      setStats({
+        totalOrders: Number(data.totalOrders) || 0,
+        totalRevenue: Number(data.totalRevenue) || 0,
+        activeRiders: Number(data.activeRiders) || 0,
+        pendingRiders: Number(data.pendingRiders) || 0
+      });
     } catch (err) {
       console.error('Error fetching dashboard stats:', err);
+      const message =
+        err.response?.data?.message ||
+        (err.response?.status === 403
+          ? 'Access denied. Administrator privileges required.'
+          : err.response?.status === 401
+          ? 'Your session has expired. Please log in again.'
+          : 'Failed to load dashboard metrics. Please verify your connection.');
+      setError(message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -288,21 +311,49 @@ export default function AdminDashboard() {
                 </div>
               </header>
 
+              {/* Inline Error Alert Banner */}
+              {error && (
+                <div className="dashboard-error-banner">
+                  <div className="error-content">
+                    <AlertCircle size={18} />
+                    <span>{error}</span>
+                  </div>
+                  <button className="retry-btn" onClick={fetchStats} title="Retry">
+                    <RefreshCw size={13} />
+                    <span>Retry</span>
+                  </button>
+                </div>
+              )}
+
               {/* TOP 4 STAT CARDS */}
               <section className="stats-grid">
                 <div className="stat-card">
                   <div className="stat-header">
                     <span className="stat-title">TOTAL REVENUE</span>
+                    <span className="stat-icon-badge green">
+                      <CreditCard size={14} />
+                    </span>
                   </div>
-                  <div className="stat-value">₹{stats.totalRevenue.toLocaleString()}</div>
+                  {isLoading ? (
+                    <div className="stat-skeleton" />
+                  ) : (
+                    <div className="stat-value">₹{Number(stats.totalRevenue || 0).toLocaleString('en-IN')}</div>
+                  )}
                   <div className="stat-subtext positive">Real-time</div>
                 </div>
 
                 <div className="stat-card">
                   <div className="stat-header">
                     <span className="stat-title">TOTAL ORDERS</span>
+                    <span className="stat-icon-badge orange">
+                      <ShoppingBag size={14} />
+                    </span>
                   </div>
-                  <div className="stat-value">{stats.totalOrders}</div>
+                  {isLoading ? (
+                    <div className="stat-skeleton" />
+                  ) : (
+                    <div className="stat-value">{Number(stats.totalOrders || 0).toLocaleString('en-IN')}</div>
+                  )}
                   <div className="stat-subtext positive">Real-time</div>
                 </div>
 
@@ -313,7 +364,11 @@ export default function AdminDashboard() {
                       <Users size={14} />
                     </span>
                   </div>
-                  <div className="stat-value">{stats.activeRiders}</div>
+                  {isLoading ? (
+                    <div className="stat-skeleton" />
+                  ) : (
+                    <div className="stat-value">{Number(stats.activeRiders || 0).toLocaleString('en-IN')}</div>
+                  )}
                   <div className="stat-subtext muted">Online Now</div>
                 </div>
 
@@ -324,7 +379,11 @@ export default function AdminDashboard() {
                       <TrendingUp size={14} />
                     </span>
                   </div>
-                  <div className="stat-value">{stats.pendingRiders}</div>
+                  {isLoading ? (
+                    <div className="stat-skeleton" />
+                  ) : (
+                    <div className="stat-value">{Number(stats.pendingRiders || 0).toLocaleString('en-IN')}</div>
+                  )}
                   <div className="stat-subtext muted">Riders</div>
                 </div>
               </section>

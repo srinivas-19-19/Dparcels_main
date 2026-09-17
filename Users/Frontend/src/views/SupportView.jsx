@@ -20,7 +20,7 @@ export const SupportView = ({ onGoOrders }) => {
       <h1 className="greeting-title" dangerouslySetInnerHTML={{ __html: t('how_can_we_help') }}></h1>
       <p className="subtitle">{t('support_sub')}</p>
 
-      <div style={{ marginTop: 16 }}>
+      <div className="support-cards-grid">
         {/* Call Support Card */}
         <div className="support-card">
           <i className="fa-solid fa-phone icon-green"></i>

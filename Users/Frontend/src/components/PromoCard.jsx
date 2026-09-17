@@ -2,18 +2,22 @@ import React, { useState, useEffect } from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import api from '../utils/api';
 
-export const PromoCard = ({ onClaim }) => {
+export const PromoCard = ({ onClaim, banners: propBanners }) => {
   const { t } = useLanguage();
   const [currentSlide, setCurrentSlide] = useState(0);
   const [serverBanners, setServerBanners] = useState([]);
 
   useEffect(() => {
-    api.get('/banners').then(res => {
-      if (res.data && res.data.data && res.data.data.length > 0) {
-        setServerBanners(res.data.data);
-      }
-    }).catch(err => console.error("Failed to fetch banners", err));
-  }, []);
+    if (propBanners && Array.isArray(propBanners) && propBanners.length > 0) {
+      setServerBanners(propBanners);
+    } else {
+      api.get('/banners').then(res => {
+        if (res.data && res.data.data && res.data.data.length > 0) {
+          setServerBanners(res.data.data);
+        }
+      }).catch(err => console.warn("[PromoCard] Notice:", err.message));
+    }
+  }, [propBanners]);
 
   const slides = [
     {

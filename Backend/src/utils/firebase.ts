@@ -1,4 +1,4 @@
-const admin = require('firebase-admin');
+import * as admin from 'firebase-admin';
 import path from 'path';
 import fs from 'fs';
 
@@ -10,11 +10,12 @@ export const initFirebase = () => {
     
     if (fs.existsSync(serviceAccountPath)) {
       const serviceAccount = require(serviceAccountPath);
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
-      });
-      initialized = true;
-      console.log('✅ Firebase Admin initialized successfully.');
+      const credential = (admin as any).credential?.cert ? (admin as any).credential.cert(serviceAccount) : (admin as any).default?.credential?.cert(serviceAccount);
+      if (credential) {
+        admin.initializeApp({ credential });
+        initialized = true;
+        console.log('✅ Firebase Admin initialized successfully.');
+      }
     } else {
       console.warn('⚠️ Firebase Admin SDK not initialized: firebase-adminsdk.json not found.');
     }
@@ -30,7 +31,7 @@ export const sendPushNotification = async (token: string, title: string, body: s
   }
 
   try {
-    await admin.messaging().send({
+    await (admin as any).messaging().send({
       token,
       notification: { title, body }
     });

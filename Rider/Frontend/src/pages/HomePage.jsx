@@ -63,16 +63,40 @@ const HomePage = () => {
     fetchOrders();
 
     if (socket) {
-      socket.on('new_order_available', () => {
+      // Explicitly ensure rider joins 'riders' room upon connection
+      socket.emit('join_riders');
+
+      const handleNewOrder = (incomingData) => {
+        const newOrder = incomingData?.order || incomingData;
+        if (!newOrder || !newOrder.id) return;
+
+        setAvailableOrders((prev) => {
+          if (prev.some((o) => o.id === newOrder.id)) return prev;
+          return [newOrder, ...prev];
+        });
+      };
+
+      const handleOrderTaken = (data) => {
+        if (data?.orderId) {
+          setAvailableOrders((prev) => prev.filter((o) => o.id !== data.orderId));
+        }
+      };
+
+      const handleStatusUpdate = () => {
         fetchOrders();
-      });
-      socket.on('order_status_update', () => {
-        fetchOrders();
-      });
+      };
+
+      socket.on('new_order_available', handleNewOrder);
+      socket.on('order_taken', handleOrderTaken);
+      socket.on('order_status_update', handleStatusUpdate);
+      socket.on('order_status_updated', handleStatusUpdate);
+
       return () => {
-        socket.off('new_order_available');
-        socket.off('order_status_update');
-      }
+        socket.off('new_order_available', handleNewOrder);
+        socket.off('order_taken', handleOrderTaken);
+        socket.off('order_status_update', handleStatusUpdate);
+        socket.off('order_status_updated', handleStatusUpdate);
+      };
     }
   }, [socket]);
 
@@ -82,9 +106,10 @@ const HomePage = () => {
         api.get('/orders/available'),
         api.get('/orders')
       ]);
-      setAvailableOrders(availableRes.data.data);
-      setActiveOrders(historyRes.data.data.filter(o => 
-        ['RIDER_ASSIGNED', 'IN_TRANSIT', 'ARRIVED'].includes(o.status)
+      setAvailableOrders(availableRes.data?.data || []);
+      const history = historyRes.data?.data || [];
+      setActiveOrders(history.filter(o => 
+        ['ACCEPTED', 'RIDER_ASSIGNED', 'IN_TRANSIT', 'ARRIVED_PICKUP', 'PICKED_UP', 'ARRIVED'].includes(o.status)
       ));
     } catch (error) {
       console.error('Failed to fetch orders:', error);
@@ -93,10 +118,21 @@ const HomePage = () => {
 
   const handleAcceptOrder = async (orderId) => {
     try {
-      await api.post(`/orders/${orderId}/accept`);
-      navigate('/trip-accepted');
+      const res = await api.post(`/orders/${orderId}/accept`);
+      const acceptedOrder = res.data?.data || availableOrders.find((o) => o.id === orderId);
+
+      // Remove from available list
+      setAvailableOrders((prev) => prev.filter((o) => o.id !== orderId));
+
+      // Move into active trip state
+      if (acceptedOrder) {
+        setActiveOrders((prev) => [{ ...acceptedOrder, status: 'ACCEPTED' }, ...prev]);
+      }
+
+      navigate('/trip-accepted', { state: { order: acceptedOrder || { id: orderId, status: 'ACCEPTED' } } });
     } catch (error) {
-      alert('Failed to accept order');
+      console.error('Failed to accept order:', error);
+      alert(error.response?.data?.message || 'Failed to accept order');
     }
   };
 
@@ -446,7 +482,9 @@ const HomePage = () => {
                   {t('activeTrip')}
                 </h3>
                 <div style={{ fontSize: '12px', color: themeColors.subText, marginTop: '2px' }}>
-                  ID - #DP1024
+                  {activeOrders[0] 
+                    ? `ID - ${activeOrders[0].trackingId || (activeOrders[0].id ? '#' + activeOrders[0].id.substring(0,6).toUpperCase() : '#DP1024')}`
+                    : 'ID - #DP1024'}
                 </div>
               </div>
 
@@ -460,7 +498,7 @@ const HomePage = () => {
                 borderRadius: '20px',
                 boxShadow: '0 4px 14px rgba(255, 138, 0, 0.35)'
               }}>
-                {t('inTransit')}
+                {activeOrders[0]?.status || t('inTransit')}
               </div>
             </div>
 
@@ -474,13 +512,15 @@ const HomePage = () => {
               <div>
                 <div style={{ fontSize: '11px', color: themeColors.subText, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('customer')}</div>
                 <div style={{ fontSize: '16px', fontWeight: '800', color: themeColors.text, marginTop: '2px' }}>
-                  Ahmed Rahman
+                  {activeOrders[0]?.customer?.firstName 
+                    ? `${activeOrders[0].customer.firstName} ${activeOrders[0].customer.lastName || ''}`
+                    : (activeOrders[0]?.customerName || 'Ahmed Rahman')}
                 </div>
               </div>
 
               {/* Call Phone Button */}
               <a
-                href="tel:9876543210"
+                href={`tel:${activeOrders[0]?.customer?.phone || '9876543210'}`}
                 style={{
                   width: '38px',
                   height: '38px',
@@ -551,7 +591,7 @@ const HomePage = () => {
                   color: themeColors.text,
                   zIndex: 3
                 }}>
-                  2.4km
+                  {activeOrders[0]?.distanceKm ? `${activeOrders[0].distanceKm}km` : '2.4km'}
                 </div>
 
                 {/* Delivery node */}
@@ -571,17 +611,17 @@ const HomePage = () => {
                 justifyContent: 'space-between',
                 marginTop: '10px'
               }}>
-                <div style={{ textAlign: 'left' }}>
+                <div style={{ textAlign: 'left', maxWidth: '45%' }}>
                   <div style={{ fontSize: '10px', color: themeColors.subText }}>{t('pickup')}</div>
-                  <div style={{ fontSize: '12px', fontWeight: '700', color: themeColors.text, marginTop: '1px' }}>
-                    DParcels Hub, Adoni
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: themeColors.text, marginTop: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {activeOrders[0]?.pickupAddress || activeOrders[0]?.pickupLocation || 'DParcels Hub, Adoni'}
                   </div>
                 </div>
 
-                <div style={{ textAlign: 'right' }}>
+                <div style={{ textAlign: 'right', maxWidth: '45%' }}>
                   <div style={{ fontSize: '10px', color: themeColors.subText }}>{t('delivery')}</div>
-                  <div style={{ fontSize: '12px', fontWeight: '700', color: themeColors.text, marginTop: '1px' }}>
-                    Railway Station, Adoni
+                  <div style={{ fontSize: '12px', fontWeight: '700', color: themeColors.text, marginTop: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {activeOrders[0]?.dropAddress || activeOrders[0]?.dropLocation || 'Railway Station, Adoni'}
                   </div>
                 </div>
               </div>
@@ -589,7 +629,7 @@ const HomePage = () => {
 
             {/* Active Trip Action Button */}
             <button
-              onClick={() => navigate('/trip-accepted')}
+              onClick={() => navigate('/trip-accepted', { state: { order: activeOrders[0] } })}
               className="primary-orange-btn"
               style={{
                 width: '100%',
@@ -640,74 +680,85 @@ const HomePage = () => {
                   No new trip requests right now.
                 </div>
               ) : (
-                availableOrders.map((order) => (
-                  <div key={order.id} style={{
-                backgroundColor: '#FF8A00',
-                borderRadius: '20px',
-                padding: '14px 16px',
-                color: '#000000',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '10px',
-                boxShadow: '0 6px 20px rgba(255, 138, 0, 0.3)'
-              }}>
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                availableOrders.map((order) => {
+                const orderId = order.id;
+                const displayId = order.trackingId || (orderId ? `#${orderId.substring(0, 6).toUpperCase()}` : '#DPARC');
+                const pickup = order.pickupAddress || order.pickupLocation || 'Pickup Location';
+                const drop = order.dropAddress || order.dropLocation || 'Drop Location';
+                const totalAmt = Number(order.totalAmount ?? order.totalPrice ?? 0);
+                const earnings = Math.round(totalAmt * 0.8);
+                const category = order.serviceType || order.category || 'EXPRESS';
+
+                return (
+                  <div key={orderId} style={{
+                    backgroundColor: '#FF8A00',
+                    borderRadius: '20px',
+                    padding: '14px 16px',
+                    color: '#000000',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px',
+                    boxShadow: '0 6px 20px rgba(255, 138, 0, 0.3)'
+                  }}>
                     <div style={{
-                      width: '36px',
-                      height: '36px',
-                      borderRadius: '50%',
-                      backgroundColor: 'rgba(0,0,0,0.15)',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center'
+                      justifyContent: 'space-between'
                     }}>
-                      <Truck size={18} color="#000000" />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div style={{
+                          width: '36px',
+                          height: '36px',
+                          borderRadius: '50%',
+                          backgroundColor: 'rgba(0,0,0,0.15)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}>
+                          <Truck size={18} color="#000000" />
+                        </div>
+                        <div>
+                          <div style={{ fontSize: '14px', fontWeight: '900', color: '#000000' }}>{displayId}</div>
+                          <div style={{ fontSize: '11px', fontWeight: '700', color: 'rgba(0,0,0,0.7)' }}>{t('earnings')} - ₹{earnings}</div>
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleAcceptOrder(orderId)}
+                        style={{
+                          backgroundColor: '#000000',
+                          border: 'none',
+                          color: '#FFFFFF',
+                          fontSize: '12px',
+                          fontWeight: '800',
+                          padding: '8px 18px',
+                          borderRadius: '16px',
+                          cursor: 'pointer',
+                          boxShadow: '0 4px 10px rgba(0,0,0,0.3)'
+                        }}
+                      >
+                        {t('accept')}
+                      </button>
                     </div>
-                    <div>
-                      <div style={{ fontSize: '14px', fontWeight: '900', color: '#000000' }}>#{order.id.substring(0,6).toUpperCase()}</div>
-                      <div style={{ fontSize: '11px', fontWeight: '700', color: 'rgba(0,0,0,0.7)' }}>{t('earnings')} - ₹{order.totalPrice * 0.8}</div>
+
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      fontSize: '11px',
+                      fontWeight: '700',
+                      color: '#000000',
+                      borderTop: '1px solid rgba(0,0,0,0.12)',
+                      paddingTop: '8px',
+                      gap: '8px'
+                    }}>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '38%' }}>{pickup}</span>
+                      <span style={{ backgroundColor: 'rgba(0,0,0,0.15)', padding: '2px 8px', borderRadius: '10px', flexShrink: 0 }}>{category}</span>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '38%', textAlign: 'right' }}>{drop}</span>
                     </div>
                   </div>
-
-                  <button
-                    onClick={() => handleAcceptOrder(order.id)}
-                    style={{
-                      backgroundColor: '#000000',
-                      border: 'none',
-                      color: '#FFFFFF',
-                      fontSize: '12px',
-                      fontWeight: '800',
-                      padding: '8px 18px',
-                      borderRadius: '16px',
-                      cursor: 'pointer',
-                      boxShadow: '0 4px 10px rgba(0,0,0,0.3)'
-                    }}
-                  >
-                    {t('accept')}
-                  </button>
-                </div>
-
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  fontSize: '11px',
-                  fontWeight: '700',
-                  color: '#000000',
-                  borderTop: '1px solid rgba(0,0,0,0.12)',
-                  paddingTop: '8px'
-                }}>
-                  <span>{order.pickupLocation}</span>
-                  <span style={{ backgroundColor: 'rgba(0,0,0,0.15)', padding: '2px 8px', borderRadius: '10px' }}>{order.category}</span>
-                  <span>{order.dropLocation}</span>
-                </div>
-              </div>
-              ))
+                );
+              })
               )}
             </div>
           </div>

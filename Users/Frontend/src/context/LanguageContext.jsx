@@ -494,6 +494,8 @@ export const translations = {
   }
 };
 
+import api from '../utils/api';
+
 const LanguageContext = createContext();
 
 export const LanguageProvider = ({ children }) => {
@@ -501,9 +503,25 @@ export const LanguageProvider = ({ children }) => {
     return localStorage.getItem('selectedLang') || 'en';
   });
 
-  const selectLanguage = (langCode) => {
+  const selectLanguage = async (langCode) => {
     setCurrentLang(langCode);
     localStorage.setItem('selectedLang', langCode);
+
+    const token = localStorage.getItem('token');
+    if (token) {
+      try {
+        await api.patch('/customers/me', { preferredLanguage: langCode });
+      } catch (err) {
+        console.warn('[LanguageContext] Failed to persist language to backend:', err);
+      }
+    }
+  };
+
+  const syncLanguage = (langCode) => {
+    if (langCode && translations[langCode]) {
+      setCurrentLang(langCode);
+      localStorage.setItem('selectedLang', langCode);
+    }
   };
 
   const t = (key) => {
@@ -512,7 +530,7 @@ export const LanguageProvider = ({ children }) => {
   };
 
   return (
-    <LanguageContext.Provider value={{ currentLang, selectLanguage, t, translations }}>
+    <LanguageContext.Provider value={{ currentLang, selectLanguage, syncLanguage, t, translations }}>
       {children}
     </LanguageContext.Provider>
   );

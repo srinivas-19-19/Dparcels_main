@@ -74,7 +74,11 @@ export const registerRiderController = async (req: Request, res: Response) => {
     }, 'Rider registered successfully and pending approval');
   } catch (error: any) {
     const status = error instanceof CustomError ? error.statusCode : 400;
-    return sendError(res, status, error.message || 'Error during rider registration');
+    const rawMsg = error?.message || 'Error during rider registration';
+    const message = (typeof rawMsg === 'string' && (rawMsg.includes('prisma') || rawMsg.includes('Invocation') || rawMsg.includes('credentials')))
+      ? 'Invalid OTP. Please try again.'
+      : rawMsg;
+    return sendError(res, status, message);
   }
 };
 
@@ -162,6 +166,9 @@ export const getMeController = async (req: Request, res: Response) => {
       return sendError(res, 401, 'Unauthorized');
     }
     const user = await AuthServices.getMe(userId);
+    if (!user) {
+      return sendError(res, 404, 'User not found');
+    }
     return sendSuccess(res, 200, user);
   } catch (error: any) {
     return sendError(res, 500, 'Error fetching profile');

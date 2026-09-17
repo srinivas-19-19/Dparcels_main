@@ -6,6 +6,6 @@ export const estimateSchema = z.object({
     pickupLng: z.number().min(-180).max(180),
     dropLat: z.number().min(-90).max(90),
     dropLng: z.number().min(-180).max(180),
-    serviceType: z.enum(['STANDARD', 'EXPRESS']).default('STANDARD'),
+    serviceType: z.string().min(1).default('STANDARD'),
   }),
 });

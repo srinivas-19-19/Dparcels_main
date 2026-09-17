@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { validateRequest } from '../../middleware/validate';
 import { authenticate, requireRole } from '../../middleware/auth';
-import { createOrderSchema } from './orders.schema';
+import { createOrderSchema, cancelOrderSchema } from './orders.schema';
 import { 
   createOrderController, 
   getOrdersController, 
   getOrderByIdController,
+  cancelOrderController,
   getAvailableOrdersController,
   acceptOrderController,
   updateOrderStatusController,
@@ -18,9 +19,12 @@ router.use(authenticate);
 
 // Customers
 router.post('/', requireRole(['CUSTOMER']), validateRequest(createOrderSchema), createOrderController);
+router.get('/', requireRole(['CUSTOMER']), getOrdersController);
 router.get('/my-orders', requireRole(['CUSTOMER']), getOrdersController);
 router.get('/my-orders/:id', requireRole(['CUSTOMER']), getOrderByIdController);
+router.post('/:id/cancel', requireRole(['CUSTOMER']), validateRequest(cancelOrderSchema), cancelOrderController);
 router.post('/:id/rate', requireRole(['CUSTOMER']), submitReviewController);
+
 
 // Riders
 router.get('/available', requireRole(['RIDER']), getAvailableOrdersController);

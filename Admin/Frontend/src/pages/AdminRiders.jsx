@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../utils/api';
 import {
   Search,
@@ -6,51 +6,179 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
-  CheckCircle,
+  CheckCircle2,
   XCircle,
-  X
+  X,
+  AlertCircle,
+  RefreshCw,
+  Loader2,
+  ShieldCheck,
+  Bike,
+  Clock
 } from 'lucide-react';
 import AdminRiderDetails from './AdminRiderDetails';
 import '../styles/dashboard.css';
 
 export default function AdminRiders() {
-  const [filterStatus, setFilterStatus] = useState('All 23');
+  const [filterStatus, setFilterStatus] = useState('Pending');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRider, setSelectedRider] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
+  // Live Data States
+  const [pendingRiders, setPendingRiders] = useState([]);
   const [riders, setRiders] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [isLoadingPending, setIsLoadingPending] = useState(true);
+  const [isLoadingAll, setIsLoadingAll] = useState(true);
+  const [error, setError] = useState(null);
 
+  // Approval Lifecycle States
+  const [approvingId, setApprovingId] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  // Auto-dismiss toast after 3.5 seconds
   useEffect(() => {
-    fetchRiders();
+    if (toast) {
+      const timer = setTimeout(() => {
+        setToast(null);
+      }, 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+  };
+
+  // Fetch Pending Riders: GET /api/v1/admin/riders/pending
+  const fetchPendingRiders = useCallback(async () => {
+    try {
+      setIsLoadingPending(true);
+      setError(null);
+      const res = await api.get('/admin/riders/pending');
+      const list = res.data?.data || res.data || [];
+
+      const formatted = list.map((r) => {
+        const fullName = `${r.firstName || ''} ${r.lastName || ''}`.trim() || r.user?.email?.split('@')[0] || 'New Rider';
+        return {
+          id: r.id, // RiderProfile ID used for PATCH /admin/riders/:id/approve
+          userId: r.userId,
+          firstName: r.firstName || '',
+          lastName: r.lastName || '',
+          name: fullName,
+          phone: r.phone || 'N/A',
+          vehicleType: r.vehicleType || 'Motorcycle',
+          vehicleNumber: r.vehicleNumber || 'N/A',
+          isApproved: false,
+          isOnline: r.isOnline || false,
+          status: 'Pending',
+          email: r.user?.email || 'N/A',
+          appliedDate: r.user?.createdAt
+            ? new Date(r.user.createdAt).toLocaleDateString('en-IN', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric'
+              })
+            : 'Recent',
+          orders: 0,
+          earnings: '₹0.00',
+          utrNumber: r.utrNumber || 'N/A',
+          avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=FF6B00&color=fff&bold=true`
+        };
+      });
+
+      setPendingRiders(formatted);
+    } catch (err) {
+      console.error('Error fetching pending riders:', err);
+      const message =
+        err.response?.data?.message ||
+        (err.response?.status === 403
+          ? 'Access denied. Administrator privileges required.'
+          : err.response?.status === 401
+          ? 'Session expired. Please log in again.'
+          : 'Failed to load pending rider applications. Please verify network connection.');
+      setError(message);
+    } finally {
+      setIsLoadingPending(false);
+    }
   }, []);
 
-  const fetchRiders = async () => {
+  // Fetch All Riders: GET /api/v1/admin/riders
+  const fetchAllRiders = useCallback(async () => {
     try {
-      setLoading(true);
-      const response = await api.get('/admin/riders');
-      const formatted = response.data.data.map((r, i) => ({
-        id: r.id, // rider profile ID
-        userId: r.userId,
-        name: `${r.user.firstName} ${r.user.lastName}`,
-        vehicle: `${r.vehicleType} • ${r.vehicleNumber}`,
-        phone: r.user.phone,
-        location: 'Tirupati', // Can be updated if we track last known location
-        status: !r.isApproved ? 'Pending' : (r.isOnline ? 'Online' : 'Offline'),
-        orders: r._count.orders,
-        earnings: '₹0.00', // Update when payment aggregating is available
-        utrNumber: r.utrNumber,
-        avatar: `https://ui-avatars.com/api/?name=${r.user.firstName}+${r.user.lastName}&background=random`
-      }));
+      setIsLoadingAll(true);
+      const res = await api.get('/admin/riders');
+      const list = res.data?.data || res.data || [];
+
+      const formatted = list.map((r) => {
+        const fullName = `${r.firstName || ''} ${r.lastName || ''}`.trim() || r.user?.email?.split('@')[0] || 'Rider';
+        return {
+          id: r.id,
+          userId: r.userId,
+          name: fullName,
+          firstName: r.firstName || '',
+          lastName: r.lastName || '',
+          phone: r.phone || 'N/A',
+          vehicle: `${r.vehicleType || 'Vehicle'} • ${r.vehicleNumber || 'N/A'}`,
+          vehicleType: r.vehicleType || 'Motorcycle',
+          vehicleNumber: r.vehicleNumber || 'N/A',
+          location: 'Tirupati',
+          isApproved: r.isApproved,
+          isOnline: r.isOnline,
+          status: !r.isApproved ? 'Pending' : (r.isOnline ? 'Online' : 'Offline'),
+          orders: r._count?.ordersDelivered || 0,
+          earnings: '₹0.00',
+          email: r.user?.email || 'N/A',
+          avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=22C55E&color=fff&bold=true`
+        };
+      });
+
       setRiders(formatted);
-    } catch (error) {
-      console.error('Error fetching riders:', error);
+    } catch (err) {
+      console.error('Error fetching all riders:', err);
     } finally {
-      setLoading(false);
+      setIsLoadingAll(false);
+    }
+  }, []);
+
+  // Initial Fetch on component mount
+  useEffect(() => {
+    fetchPendingRiders();
+    fetchAllRiders();
+  }, [fetchPendingRiders, fetchAllRiders]);
+
+  // Handle Approving Rider: PATCH /api/v1/admin/riders/:id/approve
+  const handleApproveRider = async (id, riderName = 'Rider') => {
+    // Double-click and concurrent request guard
+    if (approvingId) return;
+
+    setApprovingId(id);
+
+    try {
+      const response = await api.patch(`/admin/riders/${id}/approve`);
+      if (response.status === 200 || response.data?.success) {
+        // Optimistic Update: Immediately filter approved rider out of pending list
+        setPendingRiders((prev) => prev.filter((r) => r.id !== id));
+
+        // Synchronize in all riders list
+        setRiders((prev) =>
+          prev.map((r) =>
+            r.id === id ? { ...r, isApproved: true, status: 'Offline' } : r
+          )
+        );
+
+        showToast(`Rider "${riderName}" approved successfully! Added to active fleet.`, 'success');
+      }
+    } catch (err) {
+      console.error('Error approving rider:', err);
+      const errMsg = err.response?.data?.message || 'Failed to approve rider. Please try again.';
+      showToast(errMsg, 'error');
+    } finally {
+      setApprovingId(null);
     }
   };
 
+  // Add Manual Rider Form State
   const [newRider, setNewRider] = useState({
     name: '',
     phone: '',
@@ -64,42 +192,95 @@ export default function AdminRiders() {
     if (!newRider.name || !newRider.phone) return;
 
     const created = {
-      id: riders.length + 1,
+      id: `manual-${Date.now()}`,
       ...newRider,
+      vehicleType: newRider.vehicle.split(' ')[0] || 'Vehicle',
+      vehicleNumber: newRider.vehicle,
       orders: 0,
-      earnings: '₹0',
-      avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80'
+      earnings: '₹0.00',
+      isApproved: newRider.status !== 'Pending',
+      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(newRider.name)}&background=random`
     };
 
+    if (newRider.status === 'Pending') {
+      setPendingRiders([created, ...pendingRiders]);
+    }
     setRiders([created, ...riders]);
     setShowAddModal(false);
     setNewRider({ name: '', phone: '', vehicle: '', location: '', status: 'Pending' });
+    showToast(`Rider "${created.name}" registered.`, 'success');
   };
 
-  const filteredRiders = riders.filter((r) => {
-    const matchesSearch =
-      r.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      r.phone.includes(searchTerm) ||
-      r.vehicle.toLowerCase().includes(searchTerm.toLowerCase());
+  // Filtering Logic
+  const filteredPendingRiders = pendingRiders.filter((r) => {
+    const query = searchTerm.toLowerCase();
+    return (
+      r.name.toLowerCase().includes(query) ||
+      r.phone.includes(query) ||
+      r.vehicleNumber.toLowerCase().includes(query) ||
+      r.vehicleType.toLowerCase().includes(query) ||
+      r.email.toLowerCase().includes(query)
+    );
+  });
 
-    if (filterStatus.includes('Online')) return matchesSearch && r.status === 'Online';
-    if (filterStatus.includes('Offline')) return matchesSearch && r.status === 'Offline';
-    if (filterStatus.includes('Pending')) return matchesSearch && r.status === 'Pending';
-    if (filterStatus.includes('Rejected')) return matchesSearch && r.status === 'Rejected';
+  const filteredAllRiders = riders.filter((r) => {
+    const query = searchTerm.toLowerCase();
+    const matchesSearch =
+      r.name.toLowerCase().includes(query) ||
+      r.phone.includes(query) ||
+      r.vehicle.toLowerCase().includes(query);
+
+    if (filterStatus === 'Online') return matchesSearch && r.status === 'Online';
+    if (filterStatus === 'Offline') return matchesSearch && r.status === 'Offline';
+    if (filterStatus === 'Rejected') return matchesSearch && r.status === 'Rejected';
     return matchesSearch;
   });
 
+  // Dynamic counts for status pills
+  const pendingCount = pendingRiders.length;
+  const allCount = riders.length;
+  const onlineCount = riders.filter((r) => r.status === 'Online').length;
+  const offlineCount = riders.filter((r) => r.status === 'Offline').length;
+
   if (selectedRider) {
-    return <AdminRiderDetails rider={selectedRider} onBack={() => setSelectedRider(null)} />;
+    return (
+      <AdminRiderDetails
+        rider={selectedRider}
+        onBack={() => setSelectedRider(null)}
+      />
+    );
   }
 
   return (
     <div className="riders-view-container">
+      {/* Toast Notification */}
+      {toast && (
+        <div className={`toast-notification ${toast.type}`}>
+          <div className="toast-icon">
+            {toast.type === 'success' ? (
+              <CheckCircle2 size={18} />
+            ) : (
+              <AlertCircle size={18} />
+            )}
+          </div>
+          <span className="toast-message">{toast.message}</span>
+          <button
+            className="toast-close-btn"
+            onClick={() => setToast(null)}
+            title="Close"
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+
       {/* Top Header Row with Title and Search */}
       <div className="riders-header-row">
         <div>
           <h1 className="header-greeting">Riders Management</h1>
-          <p className="header-subtext">Manage active delivery partners, track earnings, and verify submitted documents.</p>
+          <p className="header-subtext">
+            Review pending rider applications, verify documents, and manage active delivery fleet.
+          </p>
         </div>
 
         {/* Search Bar */}
@@ -107,7 +288,7 @@ export default function AdminRiders() {
           <Search size={18} color="#8A9285" />
           <input
             type="text"
-            placeholder="Search rider by name, phone, vehicle..."
+            placeholder="Search by name, phone, license plate..."
             className="riders-search-input"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -115,47 +296,63 @@ export default function AdminRiders() {
         </div>
       </div>
 
+      {/* Inline Error Alert Banner */}
+      {error && (
+        <div className="dashboard-error-banner">
+          <div className="error-content">
+            <AlertCircle size={18} />
+            <span>{error}</span>
+          </div>
+          <button
+            className="retry-btn"
+            onClick={() => {
+              fetchPendingRiders();
+              fetchAllRiders();
+            }}
+            title="Retry loading riders"
+          >
+            <RefreshCw size={13} />
+            <span>Retry</span>
+          </button>
+        </div>
+      )}
+
       {/* Action Bar & Status Filter Pills */}
       <div className="riders-actions-bar">
         <div className="status-filter-pills">
           <button
-            className={`status-pill-btn ${filterStatus === 'All 23' ? 'active' : ''}`}
-            onClick={() => setFilterStatus('All 23')}
+            className={`status-pill-btn ${filterStatus === 'Pending' ? 'active' : ''}`}
+            onClick={() => {
+              setFilterStatus('Pending');
+              fetchPendingRiders();
+            }}
           >
-            <span>All</span>
-            <span className="count-badge yellow">23</span>
+            <span>Pending Approvals</span>
+            <span className="count-badge orange">{pendingCount}</span>
           </button>
 
           <button
-            className={`status-pill-btn ${filterStatus === 'Online 6' ? 'active' : ''}`}
-            onClick={() => setFilterStatus('Online 6')}
+            className={`status-pill-btn ${filterStatus === 'All' ? 'active' : ''}`}
+            onClick={() => setFilterStatus('All')}
+          >
+            <span>All Fleet</span>
+            <span className="count-badge yellow">{allCount}</span>
+          </button>
+
+          <button
+            className={`status-pill-btn ${filterStatus === 'Online' ? 'active' : ''}`}
+            onClick={() => setFilterStatus('Online')}
           >
             <span>Online</span>
-            <span className="count-badge green">6</span>
+            <span className="count-badge green">{onlineCount}</span>
           </button>
 
           <button
-            className={`status-pill-btn ${filterStatus === 'Offline 10' ? 'active' : ''}`}
-            onClick={() => setFilterStatus('Offline 10')}
+            className={`status-pill-btn ${filterStatus === 'Offline' ? 'active' : ''}`}
+            onClick={() => setFilterStatus('Offline')}
           >
             <span>Offline</span>
-            <span className="count-badge gray">10</span>
-          </button>
-
-          <button
-            className={`status-pill-btn ${filterStatus === 'Pending 3' ? 'active' : ''}`}
-            onClick={() => setFilterStatus('Pending 3')}
-          >
-            <span>Pending</span>
-            <span className="count-badge yellow">3</span>
-          </button>
-
-          <button
-            className={`status-pill-btn ${filterStatus === 'Rejected 2' ? 'active' : ''}`}
-            onClick={() => setFilterStatus('Rejected 2')}
-          >
-            <span>Rejected</span>
-            <span className="count-badge red">2</span>
+            <span className="count-badge gray">{offlineCount}</span>
           </button>
         </div>
 
@@ -165,52 +362,242 @@ export default function AdminRiders() {
         </button>
       </div>
 
-      {/* RIDERS TABLE */}
-      <div className="riders-table-card">
-        <table className="riders-table">
-          <thead>
-            <tr>
-              <th>RIDER NAME</th>
-              <th>VEHICLE DETAILS</th>
-              <th>PHONE NUMBER</th>
-              <th>LOCATION / ZONE</th>
-              <th>STATUS</th>
-              <th>ORDERS</th>
-              <th>EARNINGS</th>
-              <th>ACTIONS</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredRiders.map((r) => (
-              <tr key={r.id}>
-                <td className="rider-cell">
-                  <img src={r.avatar} alt={r.name} className="table-avatar" />
-                  <span className="rider-name-text">{r.name}</span>
-                </td>
-                <td className="vehicle-cell">{r.vehicle}</td>
-                <td className="phone-cell">{r.phone}</td>
-                <td className="location-cell">{r.location}</td>
-                <td>
-                  <span className={`rider-status-badge ${r.status.toLowerCase()}`}>
-                    {r.status}
-                  </span>
-                </td>
-                <td className="orders-cell">{r.orders}</td>
-                <td className="earnings-cell">{r.earnings}</td>
-                <td className="actions-cell">
-                  <button
-                    className="action-icon-btn highlight"
-                    title="View Rider Profile & Documents"
-                    onClick={() => setSelectedRider(r)}
-                  >
-                    <Eye size={16} />
-                  </button>
-                </td>
+      {/* MAIN DATA TABLE: PENDING RIDERS VIEW */}
+      {filterStatus === 'Pending' ? (
+        <div className="riders-table-card">
+          <table className="riders-table">
+            <thead>
+              <tr>
+                <th>RIDER APPLICANT</th>
+                <th>PHONE NUMBER</th>
+                <th>VEHICLE TYPE</th>
+                <th>LICENSE PLATE / NUMBER</th>
+                <th>APPLIED ON</th>
+                <th>STATUS</th>
+                <th style={{ textAlign: 'center' }}>APPROVAL ACTION</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {isLoadingPending ? (
+                // Shimmer Loading Skeleton Rows
+                [...Array(4)].map((_, i) => (
+                  <tr key={`skeleton-${i}`} className="skeleton-row">
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div className="skeleton-box avatar" />
+                        <div>
+                          <div className="skeleton-box text-lg" style={{ marginBottom: '6px' }} />
+                          <div className="skeleton-box text-sm" />
+                        </div>
+                      </div>
+                    </td>
+                    <td><div className="skeleton-box text-md" /></td>
+                    <td><div className="skeleton-box text-sm" /></td>
+                    <td><div className="skeleton-box badge" /></td>
+                    <td><div className="skeleton-box text-sm" /></td>
+                    <td><div className="skeleton-box badge" /></td>
+                    <td style={{ textAlign: 'center' }}>
+                      <div className="skeleton-box button" style={{ margin: '0 auto' }} />
+                    </td>
+                  </tr>
+                ))
+              ) : filteredPendingRiders.length === 0 ? (
+                // Clean Empty State
+                <tr>
+                  <td colSpan={7}>
+                    <div className="empty-state-card">
+                      <div className="empty-state-icon-wrap">
+                        <ShieldCheck size={32} />
+                      </div>
+                      <div className="empty-state-title">
+                        {searchTerm ? 'No Matching Applications' : 'All Rider Applications Approved'}
+                      </div>
+                      <p className="empty-state-desc">
+                        {searchTerm
+                          ? `No pending riders matched "${searchTerm}". Try searching by a different name or phone number.`
+                          : 'There are no unapproved riders waiting in the queue. All delivery partners are ready and active.'}
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredPendingRiders.map((r) => {
+                  const isThisApproving = approvingId === r.id;
+                  const isAnyApproving = approvingId !== null;
+
+                  return (
+                    <tr key={r.id}>
+                      <td className="rider-cell">
+                        <img src={r.avatar} alt={r.name} className="table-avatar" />
+                        <div>
+                          <span className="rider-name-text">{r.name}</span>
+                          <div className="rider-email-sub">{r.email}</div>
+                        </div>
+                      </td>
+                      <td className="phone-cell">{r.phone}</td>
+                      <td className="vehicle-cell">
+                        <span className="vehicle-type-pill">
+                          <Bike size={15} color="#FF6B00" />
+                          <span>{r.vehicleType}</span>
+                        </span>
+                      </td>
+                      <td>
+                        <span className="license-plate-badge">{r.vehicleNumber}</span>
+                      </td>
+                      <td className="location-cell">
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.82rem' }}>
+                          <Clock size={13} color="#71717A" />
+                          {r.appliedDate}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="rider-status-badge pending">
+                          Pending Approval
+                        </span>
+                      </td>
+                      <td className="actions-cell" style={{ justifyContent: 'center' }}>
+                        <button
+                          className={`approve-rider-btn ${isThisApproving ? 'is-approving' : ''}`}
+                          onClick={() => handleApproveRider(r.id, r.name)}
+                          disabled={isAnyApproving}
+                          title={isThisApproving ? 'Approving application...' : 'Approve and activate rider'}
+                        >
+                          {isThisApproving ? (
+                            <>
+                              <Loader2 size={15} className="animate-spin" />
+                              <span>Approving...</span>
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 size={15} />
+                              <span>Approve Rider</span>
+                            </>
+                          )}
+                        </button>
+
+                        <button
+                          className="action-icon-btn highlight"
+                          title="View Rider Profile & Documents"
+                          onClick={() => setSelectedRider(r)}
+                        >
+                          <Eye size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        /* ALL / ONLINE / OFFLINE RIDERS TABLE VIEW */
+        <div className="riders-table-card">
+          <table className="riders-table">
+            <thead>
+              <tr>
+                <th>RIDER NAME</th>
+                <th>VEHICLE DETAILS</th>
+                <th>PHONE NUMBER</th>
+                <th>LOCATION / ZONE</th>
+                <th>STATUS</th>
+                <th>ORDERS</th>
+                <th>EARNINGS</th>
+                <th>ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoadingAll ? (
+                [...Array(4)].map((_, i) => (
+                  <tr key={`sk-all-${i}`} className="skeleton-row">
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div className="skeleton-box avatar" />
+                        <div className="skeleton-box text-lg" />
+                      </div>
+                    </td>
+                    <td><div className="skeleton-box text-md" /></td>
+                    <td><div className="skeleton-box text-sm" /></td>
+                    <td><div className="skeleton-box text-sm" /></td>
+                    <td><div className="skeleton-box badge" /></td>
+                    <td><div className="skeleton-box text-sm" /></td>
+                    <td><div className="skeleton-box text-sm" /></td>
+                    <td><div className="skeleton-box button" /></td>
+                  </tr>
+                ))
+              ) : filteredAllRiders.length === 0 ? (
+                <tr>
+                  <td colSpan={8}>
+                    <div className="empty-state-card">
+                      <div className="empty-state-title">No Riders Found</div>
+                      <p className="empty-state-desc">No riders found matching the current filter criteria.</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredAllRiders.map((r) => (
+                  <tr key={r.id}>
+                    <td className="rider-cell">
+                      <img src={r.avatar} alt={r.name} className="table-avatar" />
+                      <div>
+                        <span className="rider-name-text">{r.name}</span>
+                        {r.email && <div className="rider-email-sub">{r.email}</div>}
+                      </div>
+                    </td>
+                    <td className="vehicle-cell">
+                      <span className="license-plate-badge" style={{ marginRight: '8px' }}>
+                        {r.vehicleNumber}
+                      </span>
+                      <span>{r.vehicleType}</span>
+                    </td>
+                    <td className="phone-cell">{r.phone}</td>
+                    <td className="location-cell">{r.location}</td>
+                    <td>
+                      <span className={`rider-status-badge ${r.status.toLowerCase()}`}>
+                        {r.status}
+                      </span>
+                    </td>
+                    <td className="orders-cell">{r.orders}</td>
+                    <td className="earnings-cell">{r.earnings}</td>
+                    <td className="actions-cell">
+                      {/* If rider in All list is pending, provide quick approve */}
+                      {!r.isApproved && (
+                        <button
+                          className={`approve-rider-btn ${approvingId === r.id ? 'is-approving' : ''}`}
+                          onClick={() => handleApproveRider(r.id, r.name)}
+                          disabled={approvingId !== null}
+                          title="Approve Rider"
+                          style={{ padding: '6px 12px', fontSize: '0.78rem' }}
+                        >
+                          {approvingId === r.id ? (
+                            <>
+                              <Loader2 size={13} className="animate-spin" />
+                              <span>Approving...</span>
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 size={13} />
+                              <span>Approve</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+
+                      <button
+                        className="action-icon-btn highlight"
+                        title="View Rider Profile & Documents"
+                        onClick={() => setSelectedRider(r)}
+                      >
+                        <Eye size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Pagination Controls */}
       <div className="pagination-bar">
@@ -219,7 +606,6 @@ export default function AdminRiders() {
         </button>
         <button className="page-btn active">1</button>
         <button className="page-btn">2</button>
-        <button className="page-btn">3</button>
         <button className="page-btn">
           <ChevronRight size={16} />
         </button>
@@ -292,7 +678,11 @@ export default function AdminRiders() {
                 </select>
               </div>
 
-              <button type="submit" className="add-rider-btn" style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }}>
+              <button
+                type="submit"
+                className="add-rider-btn"
+                style={{ width: '100%', justifyContent: 'center', marginTop: '1rem' }}
+              >
                 <span>Save & Register Rider</span>
               </button>
             </form>
