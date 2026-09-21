@@ -334,8 +334,8 @@ export const OrdersView = ({ onGoHome }) => {
               onClick={() => setDetailOrderId(order.rawId)}
               style={{
                 width: '100%',
-                backgroundColor: 'var(--card-bg)',
-                border: '1px solid var(--border-color)',
+                backgroundColor: 'var(--bg-card-solid, var(--card-bg, #121a2b))',
+                border: '1px solid var(--border-color, rgba(255,255,255,0.12))',
                 borderRadius: 18,
                 padding: 16,
                 boxSizing: 'border-box',
@@ -362,8 +362,8 @@ export const OrdersView = ({ onGoHome }) => {
                     <i className={`fa-solid ${order.icon}`}></i>
                   </div>
                   <div>
-                    <strong style={{ fontSize: 14, color: 'var(--text-main)', display: 'block' }}>{order.type}</strong>
-                    <span style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700 }}>ID: {order.id} • {order.time}</span>
+                    <strong style={{ fontSize: 14, color: 'var(--text-main, #f8fafc)', display: 'block', fontWeight: 800 }}>{order.type}</strong>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted, #cbd5e1)', fontWeight: 700 }}>ID: {order.id} • {order.time}</span>
                   </div>
                 </div>
 
@@ -384,11 +384,11 @@ export const OrdersView = ({ onGoHome }) => {
 
               {/* Progress Timeline Stepper */}
               <div style={{
-                background: 'var(--input-bg)',
+                background: 'var(--input-bg, #121d2f)',
                 borderRadius: 12,
                 padding: '12px 6px',
                 marginBottom: 12,
-                border: '1px solid var(--border-color)'
+                border: '1px solid var(--border-color, rgba(255,255,255,0.12))'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
                   {STEPS.map((step, idx) => {
@@ -407,9 +407,9 @@ export const OrdersView = ({ onGoHome }) => {
                           width: 22,
                           height: 22,
                           borderRadius: '50%',
-                          backgroundColor: isUpcoming ? 'var(--card-bg)' : activeColor,
-                          border: isUpcoming ? '2px solid var(--border-color)' : `2px solid ${activeColor}`,
-                          color: isUpcoming ? 'var(--text-muted)' : '#ffffff',
+                          backgroundColor: isUpcoming ? 'var(--card-bg, #121a2b)' : activeColor,
+                          border: isUpcoming ? '2px solid var(--border-color, rgba(255,255,255,0.15))' : `2px solid ${activeColor}`,
+                          color: isUpcoming ? 'var(--text-muted, #cbd5e1)' : '#ffffff',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -429,8 +429,8 @@ export const OrdersView = ({ onGoHome }) => {
                         <span style={{
                           fontSize: 9,
                           marginTop: 4,
-                          fontWeight: isCurrent ? 800 : 600,
-                          color: isUpcoming ? 'var(--text-muted)' : isCurrent ? activeColor : 'var(--text-main)',
+                          fontWeight: isCurrent ? 800 : 700,
+                          color: isUpcoming ? 'var(--text-muted, #cbd5e1)' : isCurrent ? activeColor : 'var(--text-main, #f8fafc)',
                           textAlign: 'center',
                           whiteSpace: 'nowrap'
                         }}>
@@ -445,7 +445,7 @@ export const OrdersView = ({ onGoHome }) => {
                             left: '50%',
                             width: '100%',
                             height: 2,
-                            backgroundColor: stepNum < currentStepNum ? '#22c55e' : 'var(--border-color)',
+                            backgroundColor: stepNum < currentStepNum ? '#22c55e' : 'var(--border-color, rgba(255,255,255,0.15))',
                             zIndex: -1
                           }} />
                         )}
@@ -456,14 +456,14 @@ export const OrdersView = ({ onGoHome }) => {
               </div>
 
               {/* Order Locations */}
-              <div style={{ background: 'var(--input-bg)', borderRadius: 12, padding: '10px 12px', marginBottom: 12, border: '1px solid var(--border-color)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-main)', marginBottom: 6 }}>
+              <div style={{ background: 'var(--input-bg, #121d2f)', borderRadius: 12, padding: '10px 12px', marginBottom: 12, border: '1px solid var(--border-color, rgba(255,255,255,0.12))' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-main, #f8fafc)', marginBottom: 6 }}>
                   <i className="fa-solid fa-circle-dot" style={{ color: '#22c55e', fontSize: 10 }}></i>
-                  <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{order.store}</span>
+                  <span style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{order.store}</span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-main)' }}>
-                  <i className="fa-solid fa-location-dot" style={{ color: 'var(--primary-orange-light)', fontSize: 10 }}></i>
-                  <span style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{order.drop}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-main, #f8fafc)' }}>
+                  <i className="fa-solid fa-location-dot" style={{ color: 'var(--primary-orange-light, #FF8800)', fontSize: 10 }}></i>
+                  <span style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{order.drop}</span>
                 </div>
               </div>
 
@@ -494,10 +494,10 @@ export const OrdersView = ({ onGoHome }) => {
                       <i className="fa-solid fa-motorcycle"></i>
                     </div>
                     <div>
-                      <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-main)' }}>
+                      <div style={{ fontSize: 12, fontWeight: 800, color: 'var(--text-main, #f8fafc)' }}>
                         {order.rider.firstName} {order.rider.lastName || ''}
                       </div>
-                      <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted, #cbd5e1)', fontWeight: 700 }}>
                         {order.rider.vehicleType || 'Bike'} • {order.rider.vehicleNumber || 'Assigned'}
                         {order.rider.rating ? ` • ★ ${order.rider.rating}` : ''}
                       </div>
@@ -559,24 +559,7 @@ export const OrdersView = ({ onGoHome }) => {
                       <span>{order.paymentStatus === 'PAID' ? 'Paid / View QR' : 'Pay Rider / QR'}</span>
                     </button>
                   )}
-                  {['DRAFT', 'PAYMENT_PENDING', 'CONFIRMED', 'ASSIGNING', 'RIDER_ASSIGNED'].includes(order.status) && (
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); handleCancelOrder(order.rawId); }}
-                      style={{
-                        background: 'rgba(239, 68, 68, 0.12)',
-                        border: '1px solid rgba(239, 68, 68, 0.3)',
-                        color: '#ef4444',
-                        borderRadius: 10,
-                        padding: '4px 9px',
-                        fontSize: 10,
-                        fontWeight: 700,
-                        cursor: 'pointer'
-                      }}
-                    >
-                      Cancel
-                    </button>
-                  )}
+                  {/* Removed quick cancel button to enforce reason selection inside OrderDetailModal */}
                   <strong style={{ fontSize: 16, color: 'var(--primary-orange-light)', fontWeight: 900 }}>{order.amount}</strong>
                 </div>
               </div>

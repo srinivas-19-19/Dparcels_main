@@ -45,7 +45,7 @@ const TripAcceptedPage = () => {
 
   const fetchActiveOrder = async () => {
     try {
-      const res = await api.get('/orders');
+      const res = await api.get('/rider/orders');
       const orders = res.data?.data || [];
       const current = orders.find((o) =>
         ['ACCEPTED', 'RIDER_ASSIGNED', 'ARRIVED_PICKUP', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(o.status)
@@ -213,13 +213,13 @@ const TripAcceptedPage = () => {
     }
   };
 
-  const displayId = activeOrder?.trackingId || (activeOrder?.id ? `#${activeOrder.id.substring(0, 6).toUpperCase()}` : '#DP1024');
-  const pickupAddress = activeOrder?.pickupAddress || activeOrder?.pickupLocation || 'DParcels Hub, Adoni';
-  const dropAddress = activeOrder?.dropAddress || activeOrder?.dropLocation || 'Railway Station Road, Adoni';
-  const distance = activeOrder?.distanceKm ? `${activeOrder.distanceKm} km` : '3.2 km';
-  const eta = activeOrder?.estimatedTimeMins ? `${activeOrder.estimatedTimeMins} min` : '12 min';
-  const customerName = activeOrder?.customer?.firstName ? `${activeOrder.customer.firstName} ${activeOrder.customer.lastName || ''}` : (activeOrder?.customerName || 'Ahmed Rahman');
-  const customerPhone = activeOrder?.customer?.phone || '9876543210';
+  const displayId = activeOrder?.trackingId || (activeOrder?.id ? `#${activeOrder.id.substring(0, 6).toUpperCase()}` : 'Order');
+  const pickupAddress = activeOrder?.pickupAddress || activeOrder?.pickupLocation || 'Pickup Location';
+  const dropAddress = activeOrder?.dropAddress || activeOrder?.dropLocation || 'Delivery Location';
+  const distance = activeOrder?.distanceKm ? `${activeOrder.distanceKm} km` : 'Calculating...';
+  const eta = activeOrder?.estimatedTimeMins ? `${activeOrder.estimatedTimeMins} min` : 'Pending';
+  const customerName = activeOrder?.customer?.firstName ? `${activeOrder.customer.firstName} ${activeOrder.customer.lastName || ''}`.trim() : (activeOrder?.customerName || 'Customer');
+  const customerPhone = activeOrder?.customer?.phone || '';
 
   return (
     <div style={{

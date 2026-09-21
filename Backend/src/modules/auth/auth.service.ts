@@ -160,8 +160,6 @@ export const AuthServices = {
         otp: data.otp,
         purpose: 'EMAIL_VERIFICATION'
       });
-    } else {
-      throw new CustomError('OTP is required for registration.', 400);
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);

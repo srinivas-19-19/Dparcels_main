@@ -340,8 +340,8 @@ export const SavedAddressesModal = ({ isOpen, onClose, onAddressSelect }) => {
                         padding: '14px',
                         border: addr.isDefault
                           ? '1px solid rgba(255, 107, 0, 0.4)'
-                          : '1px solid var(--border-color, rgba(255,255,255,0.08))',
-                        background: addr.isDefault ? 'rgba(255, 107, 0, 0.04)' : undefined,
+                          : '1px solid var(--border-color, rgba(255,255,255,0.12))',
+                        background: addr.isDefault ? 'rgba(255, 107, 0, 0.08)' : 'var(--input-bg, #121d2f)',
                         cursor: onAddressSelect ? 'pointer' : 'default',
                       }}
                       onClick={() => onAddressSelect && onAddressSelect(addr)}
@@ -356,14 +356,14 @@ export const SavedAddressesModal = ({ isOpen, onClose, onAddressSelect }) => {
                               fontSize: 14,
                               background: addr.isDefault
                                 ? 'rgba(255, 107, 0, 0.2)'
-                                : 'rgba(255,255,255,0.06)',
-                              color: addr.isDefault ? 'var(--primary-orange-light)' : '#fff',
+                                : 'var(--border-color, rgba(255,255,255,0.1))',
+                              color: addr.isDefault ? 'var(--primary-orange-light)' : 'var(--text-main, #fff)',
                             }}
                           >
                             <i className={getLabelIcon(addr.label)}></i>
                           </div>
                           <div>
-                            <span style={{ fontSize: 14, fontWeight: 800, textTransform: 'uppercase' }}>
+                            <span style={{ fontSize: 14, fontWeight: 800, textTransform: 'uppercase', color: 'var(--text-main, #f8fafc)' }}>
                               {addr.label}
                             </span>
                             {addr.isDefault && (
@@ -392,7 +392,7 @@ export const SavedAddressesModal = ({ isOpen, onClose, onAddressSelect }) => {
                               style={{
                                 background: 'transparent',
                                 border: 'none',
-                                color: 'var(--text-muted)',
+                                color: 'var(--text-muted, #cbd5e1)',
                                 cursor: 'pointer',
                                 padding: 4,
                                 fontSize: 13,
@@ -411,7 +411,7 @@ export const SavedAddressesModal = ({ isOpen, onClose, onAddressSelect }) => {
                             style={{
                               background: 'transparent',
                               border: 'none',
-                              color: 'var(--text-muted)',
+                              color: 'var(--text-muted, #cbd5e1)',
                               cursor: 'pointer',
                               padding: 4,
                               fontSize: 13,
@@ -444,10 +444,10 @@ export const SavedAddressesModal = ({ isOpen, onClose, onAddressSelect }) => {
                         </div>
                       </div>
 
-                      <p style={{ fontSize: 13, color: '#e2e8f0', margin: '4px 0 2px 0', lineHeight: 1.4 }}>
+                      <p style={{ fontSize: 13, color: 'var(--text-main, #f8fafc)', margin: '4px 0 2px 0', lineHeight: 1.4, fontWeight: 600 }}>
                         {addr.streetAddress}
                       </p>
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted, #cbd5e1)', fontWeight: 500 }}>
                         {[addr.city, addr.state, addr.postalCode].filter(Boolean).join(', ')}
                       </span>
                     </div>

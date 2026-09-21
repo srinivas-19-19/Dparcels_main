@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useJsApiLoader, GoogleMap, Marker, Polyline } from '@react-google-maps/api';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
@@ -96,6 +96,24 @@ export default function OrderDetailModal({ isOpen, orderId, onClose, onReorder, 
   // Payment modal
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
 
+  // Cancellation State
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelOtherReason, setCancelOtherReason] = useState('');
+  const [cancelSubmitting, setCancelSubmitting] = useState(false);
+  const [cancelError, setCancelError] = useState('');
+
+  const CANCEL_REASONS = [
+    'Changed my mind',
+    'Ordered by mistake',
+    'Taking too long',
+    'Wrong pickup location',
+    'Wrong delivery location',
+    'Price is too high',
+    'Found another option',
+    'Other'
+  ];
+
   const fetchOrder = useCallback(async () => {
     if (!orderId) return;
     setLoading(true);
@@ -163,9 +181,37 @@ export default function OrderDetailModal({ isOpen, orderId, onClose, onReorder, 
       setShowRating(false);
       await fetchOrder();
     } catch (err) {
-      alert(err?.response?.data?.message || 'Failed to submit review');
+      console.error(err);
+      alert('Failed to submit review');
     } finally {
       setRatingSubmitting(false);
+    }
+  };
+
+  const handleCancelOrder = async () => {
+    if (!cancelReason) {
+      setCancelError('Please select a reason');
+      return;
+    }
+    const finalReason = cancelReason === 'Other' ? cancelOtherReason.trim() : cancelReason;
+    if (cancelReason === 'Other' && finalReason.length < 5) {
+      setCancelError('Please provide more details');
+      return;
+    }
+
+    setCancelSubmitting(true);
+    setCancelError('');
+    try {
+      await api.post(`/orders/${orderId}/cancel`, { reason: finalReason });
+      setCancelModalOpen(false);
+      await fetchOrder();
+      window.dispatchEvent(new CustomEvent('dparcels:orderUpdated'));
+      window.dispatchEvent(new CustomEvent('dparcels:refreshDashboard'));
+    } catch (err) {
+      console.error(err);
+      setCancelError(err.response?.data?.message || 'Failed to cancel order');
+    } finally {
+      setCancelSubmitting(false);
     }
   };
 
@@ -187,24 +233,23 @@ export default function OrderDetailModal({ isOpen, orderId, onClose, onReorder, 
     onClose();
   };
 
-  if (!isOpen) return null;
-
-  const statusMeta = STATUS_META[order?.status] || { color: '#a855f7', label: order?.status || '' };
-  const isDelivered = order?.status === 'DELIVERED';
-  const isCancelled = order?.status === 'CANCELLED' || order?.status === 'FAILED';
-  const isPaid = order?.payment?.status === 'PAID';
-
   const mapPositions = useMemo(() => {
-    return order
-      ? [
-          { lat: order.pickupLat, lng: order.pickupLng },
-          { lat: order.dropLat, lng: order.dropLng },
-        ]
-      : null;
+    if (!order) return null;
+    const pLat = Number(order.pickupLat);
+    const pLng = Number(order.pickupLng);
+    const dLat = Number(order.dropLat);
+    const dLng = Number(order.dropLng);
+    if (!isNaN(pLat) && !isNaN(pLng) && !isNaN(dLat) && !isNaN(dLng) && pLat !== 0 && dLat !== 0) {
+      return [
+        { lat: pLat, lng: pLng },
+        { lat: dLat, lng: dLng },
+      ];
+    }
+    return null;
   }, [order?.pickupLat, order?.pickupLng, order?.dropLat, order?.dropLng]);
 
   useEffect(() => {
-    if (mapRef.current && isLoaded && activeTab === 'map' && mapPositions && window.google?.maps) {
+    if (isOpen && mapRef.current && isLoaded && activeTab === 'map' && mapPositions && window.google?.maps) {
       try {
         const bounds = new window.google.maps.LatLngBounds();
         bounds.extend(mapPositions[0]);
@@ -214,7 +259,17 @@ export default function OrderDetailModal({ isOpen, orderId, onClose, onReorder, 
         console.warn('Error setting map bounds', e);
       }
     }
-  }, [isLoaded, activeTab, mapPositions]);
+  }, [isOpen, isLoaded, activeTab, mapPositions]);
+
+  if (!isOpen) return null;
+
+  const statusMeta = STATUS_META[order?.status] || { color: '#a855f7', label: order?.status || '' };
+  const isDelivered = order?.status === 'DELIVERED';
+  const isCancelled = order?.status === 'CANCELLED' || order?.status === 'FAILED';
+  const isPaid = order?.payment?.status === 'PAID';
+
+  const CANCELLABLE_STATUSES = ['DRAFT', 'PAYMENT_PENDING', 'CONFIRMED', 'ASSIGNING', 'RIDER_ASSIGNED', 'ACCEPTED'];
+  const canCancel = CANCELLABLE_STATUSES.includes(order?.status);
 
   // ── Pricing breakdown ──
   const basePrice = order?.basePrice ?? 39;
@@ -237,17 +292,19 @@ export default function OrderDetailModal({ isOpen, orderId, onClose, onReorder, 
       <div
         style={{
           position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 3001,
-          background: 'var(--card-bg, #1a1a2e)',
+          background: 'var(--bg-modal, #0f172a)',
+          color: 'var(--text-main, #f8fafc)',
           borderRadius: '24px 24px 0 0',
-          boxShadow: '0 -8px 60px rgba(0,0,0,0.6)',
+          boxShadow: '0 -8px 60px rgba(0,0,0,0.75)',
           maxHeight: '92vh',
           display: 'flex', flexDirection: 'column',
           overflow: 'hidden',
+          borderTop: '1px solid var(--border-color, rgba(255,255,255,0.15))',
         }}
       >
         {/* ── Handle bar ── */}
         <div style={{ display: 'flex', justifyContent: 'center', padding: '10px 0 4px' }}>
-          <div style={{ width: 40, height: 4, borderRadius: 99, background: 'var(--border-color)' }} />
+          <div style={{ width: 40, height: 4, borderRadius: 99, background: 'var(--border-color, rgba(255,255,255,0.2))' }} />
         </div>
 
         {/* ── Header ── */}
@@ -255,25 +312,25 @@ export default function OrderDetailModal({ isOpen, orderId, onClose, onReorder, 
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             padding: '8px 20px 12px',
-            borderBottom: '1px solid var(--border-color)',
+            borderBottom: '1px solid var(--border-color, rgba(255,255,255,0.12))',
           }}
         >
           <div>
-            <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--text-main)' }}>
+            <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--text-main, #f8fafc)' }}>
               Order Details
             </div>
             {order && (
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, marginTop: 2 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted, #cbd5e1)', fontWeight: 700, marginTop: 2 }}>
                 {order.trackingId} &nbsp;•&nbsp;
-                <span style={{ color: statusMeta.color }}>{statusMeta.label}</span>
+                <span style={{ color: statusMeta.color, fontWeight: 800 }}>{statusMeta.label}</span>
               </div>
             )}
           </div>
           <button
             onClick={onClose}
             style={{
-              background: 'var(--input-bg)', border: '1px solid var(--border-color)',
-              color: 'var(--text-muted)', borderRadius: 10, width: 36, height: 36,
+              background: 'var(--input-bg, #121d2f)', border: '1px solid var(--border-color, rgba(255,255,255,0.12))',
+              color: 'var(--text-main, #f8fafc)', borderRadius: 10, width: 36, height: 36,
               cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: 14,
             }}
@@ -647,14 +704,16 @@ export default function OrderDetailModal({ isOpen, orderId, onClose, onReorder, 
                           title={`Drop: ${order.dropAddress}`}
                           icon={'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent('<svg width="26" height="26" viewBox="0 0 26 26" xmlns="http://www.w3.org/2000/svg"><circle cx="13" cy="13" r="13" fill="#ef4444"/><circle cx="13" cy="13" r="4" fill="#ffffff"/></svg>')}
                         />
-                        <Polyline
-                          path={mapPositions}
-                          options={{
-                            strokeColor: '#FF8A00',
-                            strokeWeight: 4,
-                            strokeOpacity: 0.85
-                          }}
-                        />
+                        {Array.isArray(mapPositions) && mapPositions.length === 2 && (
+                          <Polyline
+                            path={mapPositions}
+                            options={{
+                              strokeColor: '#FF8A00',
+                              strokeWeight: 4,
+                              strokeOpacity: 0.85
+                            }}
+                          />
+                        )}
                       </GoogleMap>
                     ) : (
                       <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
@@ -798,6 +857,24 @@ export default function OrderDetailModal({ isOpen, orderId, onClose, onReorder, 
                     <Row label="Placed At" value={fmt(order.createdAt)} />
                     <Row label="Status" value={statusMeta.label} colored={statusMeta.color} />
                   </Section>
+
+                  {/* Cancel Button */}
+                  {canCancel && (
+                    <div style={{ marginTop: 20 }}>
+                      <button
+                        onClick={() => setCancelModalOpen(true)}
+                        style={{
+                          width: '100%', padding: '14px', borderRadius: 14,
+                          background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)',
+                          color: '#ef4444', fontSize: 14, fontWeight: 800, cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+                        }}
+                      >
+                        <i className="fa-solid fa-ban" />
+                        Cancel Order
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </>
@@ -816,6 +893,149 @@ export default function OrderDetailModal({ isOpen, orderId, onClose, onReorder, 
           }}
         />
       )}
+
+      {/* Cancellation Modal */}
+      {cancelModalOpen && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 4000,
+          background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'flex-end', justifyContent: 'center'
+        }}>
+          <div style={{
+            background: 'var(--bg-modal, #0f172a)',
+            color: 'var(--text-main, #f8fafc)',
+            width: '100%', maxWidth: 520,
+            borderTopLeftRadius: 24, borderTopRightRadius: 24,
+            borderTop: '1px solid var(--border-color, rgba(255,255,255,0.18))',
+            padding: '24px', paddingBottom: 'calc(24px + env(safe-area-inset-bottom))',
+            boxShadow: '0 -10px 50px rgba(0,0,0,0.9)',
+            boxSizing: 'border-box'
+          }}>
+            <h3 style={{ margin: '0 0 8px', fontSize: 18, fontWeight: 900, color: 'var(--text-main, #f8fafc)' }}>
+              Cancel Order?
+            </h3>
+            <p style={{ margin: '0 0 16px', fontSize: 13, color: 'var(--text-muted, #cbd5e1)' }}>
+              Are you sure you want to cancel this order? Please tell us why:
+            </p>
+
+            <div style={{ maxHeight: '42vh', overflowY: 'auto', marginBottom: 16 }}>
+              {CANCEL_REASONS.map(reason => {
+                const isSelected = cancelReason === reason;
+                return (
+                  <div
+                    key={reason}
+                    onClick={() => { setCancelReason(reason); setCancelError(''); }}
+                    style={{
+                      padding: '14px 16px',
+                      border: `1.5px solid ${isSelected ? '#ef4444' : 'var(--border-color, rgba(255,255,255,0.12))'}`,
+                      borderRadius: 14,
+                      marginBottom: 8,
+                      cursor: 'pointer',
+                      background: isSelected ? 'rgba(239, 68, 68, 0.2)' : 'var(--bg-input, #121d2f)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <div style={{
+                      width: 20,
+                      height: 20,
+                      borderRadius: '50%',
+                      border: `2px solid ${isSelected ? '#ef4444' : 'var(--text-muted, #cbd5e1)'}`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      {isSelected && <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#ef4444' }} />}
+                    </div>
+                    <span style={{
+                      fontSize: 14,
+                      color: isSelected ? '#ef4444' : 'var(--text-main, #f8fafc)',
+                      fontWeight: isSelected ? 800 : 700
+                    }}>
+                      {reason}
+                    </span>
+                  </div>
+                );
+              })}
+              
+              {cancelReason === 'Other' && (
+                <textarea
+                  value={cancelOtherReason}
+                  onChange={(e) => setCancelOtherReason(e.target.value)}
+                  placeholder="Please specify (min 5 chars)..."
+                  maxLength={300}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    borderRadius: 12,
+                    background: 'var(--bg-input, #121d2f)',
+                    border: '1.5px solid #ef4444',
+                    color: 'var(--text-main, #f8fafc)',
+                    fontSize: 14,
+                    minHeight: 80,
+                    outline: 'none',
+                    resize: 'none',
+                    boxSizing: 'border-box'
+                  }}
+                />
+              )}
+            </div>
+
+            {cancelError && (
+              <div style={{ color: '#ef4444', fontSize: 13, marginBottom: 16, textAlign: 'center', fontWeight: 800 }}>
+                {cancelError}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                onClick={() => {
+                  setCancelModalOpen(false);
+                  setCancelReason('');
+                  setCancelOtherReason('');
+                  setCancelError('');
+                }}
+                disabled={cancelSubmitting}
+                style={{
+                  flex: 1,
+                  padding: '14px',
+                  borderRadius: 14,
+                  background: 'var(--bg-input, #121d2f)',
+                  border: '1px solid var(--border-color, rgba(255,255,255,0.15))',
+                  color: 'var(--text-main, #f8fafc)',
+                  fontSize: 14,
+                  fontWeight: 800,
+                  cursor: 'pointer'
+                }}
+              >
+                Keep Order
+              </button>
+              <button
+                onClick={handleCancelOrder}
+                disabled={cancelSubmitting}
+                style={{
+                  flex: 1,
+                  padding: '14px',
+                  borderRadius: 14,
+                  background: '#ef4444',
+                  border: 'none',
+                  color: '#ffffff',
+                  fontSize: 14,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  opacity: cancelSubmitting ? 0.7 : 1,
+                  boxShadow: '0 4px 14px rgba(239, 68, 68, 0.4)'
+                }}
+              >
+                {cancelSubmitting ? 'Cancelling...' : 'Confirm Cancel'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -824,12 +1044,13 @@ export default function OrderDetailModal({ isOpen, orderId, onClose, onReorder, 
 function Section({ title, icon, children }) {
   return (
     <div style={{
-      background: 'var(--input-bg)', border: '1px solid var(--border-color)',
+      background: 'var(--bg-input, var(--input-bg, #121d2f))',
+      border: '1px solid var(--border-color, rgba(255,255,255,0.12))',
       borderRadius: 14, padding: '14px', marginBottom: 12,
     }}>
       <div style={{
-        fontSize: 11, fontWeight: 800, color: 'var(--text-muted)',
-        textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10,
+        fontSize: 11, fontWeight: 800, color: 'var(--text-main, #f8fafc)',
+        textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10,
         display: 'flex', alignItems: 'center', gap: 6,
       }}>
         <i className={`fa-solid ${icon}`} style={{ color: '#FF8A00' }} />
@@ -844,11 +1065,11 @@ function Row({ label, value, mono = false, colored }) {
   return (
     <div style={{
       display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-      padding: '5px 0', borderBottom: '1px solid rgba(255,255,255,0.04)',
+      padding: '6px 0', borderBottom: '1px solid var(--border-color, rgba(255,255,255,0.06))',
     }}>
-      <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>{label}</span>
+      <span style={{ fontSize: 12, color: 'var(--text-muted, #cbd5e1)', fontWeight: 600 }}>{label}</span>
       <span style={{
-        fontSize: 12, fontWeight: 700, color: colored || 'var(--text-main)',
+        fontSize: 12, fontWeight: 800, color: colored || 'var(--text-main, #f8fafc)',
         fontFamily: mono ? 'monospace' : 'inherit', textAlign: 'right', maxWidth: '60%',
       }}>
         {value}
@@ -859,18 +1080,18 @@ function Row({ label, value, mono = false, colored }) {
 
 function PricingRow({ label, value, highlight = false }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0' }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0' }}>
       <span style={{
         fontSize: highlight ? 14 : 12,
-        color: highlight ? 'var(--text-main)' : 'var(--text-muted)',
+        color: highlight ? 'var(--text-main, #f8fafc)' : 'var(--text-muted, #cbd5e1)',
         fontWeight: highlight ? 800 : 600,
       }}>
         {label}
       </span>
       <span style={{
-        fontSize: highlight ? 16 : 13,
-        color: highlight ? '#FF8A00' : 'var(--text-main)',
-        fontWeight: highlight ? 900 : 700,
+        fontSize: highlight ? 17 : 13,
+        color: highlight ? '#FF8A00' : 'var(--text-main, #f8fafc)',
+        fontWeight: highlight ? 900 : 800,
       }}>
         {value}
       </span>

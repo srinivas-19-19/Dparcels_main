@@ -24,6 +24,26 @@ export const OrdersService = {
       throw new Error('Customer profile not found');
     }
 
+    // Enforce business rule: Customer can have at most ONE active order across all services
+    const activeOrder = await prisma.order.findFirst({
+      where: {
+        customerProfileId: user.customerProfile.id,
+        status: { notIn: ['DELIVERED', 'CANCELLED', 'FAILED'] },
+      },
+      select: {
+        id: true,
+        trackingId: true,
+        status: true,
+        serviceType: true,
+      },
+    });
+
+    if (activeOrder) {
+      throw new Error(
+        `You already have an active ${activeOrder.serviceType || 'delivery'} order (#${activeOrder.trackingId}) in progress. Only one active order can be placed at a time.`
+      );
+    }
+
     const pickupLat = Number(data.pickupLat);
     const pickupLng = Number(data.pickupLng);
     const dropAddress = data.dropAddress || data.dropoffAddress;
@@ -106,7 +126,7 @@ export const OrdersService = {
       });
 
       return newOrder;
-    });
+    }, { maxWait: 10000, timeout: 20000 });
 
     // 5. Emit real-time socket broadcasts
     try {
@@ -189,6 +209,7 @@ export const OrdersService = {
       include: {
         events: { orderBy: { createdAt: 'desc' } },
         payment: true,
+        Review: true,
         rider: {
           select: {
             id: true,
@@ -217,20 +238,6 @@ export const OrdersService = {
     const user = await prisma.user.findUnique({ where: { id: userId }, include: { customerProfile: true } });
     if (!user?.customerProfile) throw new Error('Profile not found');
 
-    const order = await prisma.order.findFirst({
-      where: {
-        OR: [
-          { id: orderIdOrTracking },
-          { trackingId: orderIdOrTracking },
-        ],
-      },
-    });
-
-    if (!order) throw new Error('Order not found');
-    if (order.customerProfileId !== user.customerProfile.id) {
-      throw new Error('Unauthorized access to order');
-    }
-
     const CANCELLABLE_STATUSES = [
       'DRAFT',
       'PAYMENT_PENDING',
@@ -240,25 +247,58 @@ export const OrdersService = {
       'ACCEPTED',
     ];
 
-    if (!CANCELLABLE_STATUSES.includes(order.status)) {
-      throw new Error(`Order cannot be cancelled in its current state (${order.status})`);
-    }
-
     const updated = await prisma.$transaction(async (tx: any) => {
-      const cancelledOrder = await tx.order.update({
-        where: { id: order.id },
+      // Find the order inside the transaction to guarantee atomicity
+      const currentOrder = await tx.order.findFirst({
+        where: {
+          OR: [
+            { id: orderIdOrTracking },
+            { trackingId: orderIdOrTracking },
+          ],
+        },
+        include: { payment: true },
+      });
+
+      if (!currentOrder) throw new Error('Order not found');
+      if (currentOrder.customerProfileId !== user.customerProfile.id) {
+        throw new Error('Unauthorized access to order');
+      }
+
+      if (!CANCELLABLE_STATUSES.includes(currentOrder.status)) {
+        throw new Error(`Order cannot be cancelled in its current state (${currentOrder.status})`);
+      }
+
+      // Use updateMany for atomic state transition to prevent race conditions
+      const updateResult = await tx.order.updateMany({
+        where: { 
+          id: currentOrder.id,
+          status: currentOrder.status // Must still be the exact status we validated
+        },
         data: { status: 'CANCELLED' },
+      });
+
+      if (updateResult.count === 0) {
+        throw new Error('Order state changed during cancellation. Please try again.');
+      }
+
+      const cancelledOrder = await tx.order.findUnique({
+        where: { id: currentOrder.id },
         include: { rider: true, events: true },
       });
 
+      // Prepare metadata for refunds if necessary
+      const isPaid = currentOrder.payment?.status === 'PAID';
+      const eventMetadata = isPaid ? { refundStatus: 'PENDING' } : {};
+
       await tx.orderEvent.create({
         data: {
-          orderId: order.id,
-          previousStatus: order.status,
+          orderId: currentOrder.id,
+          previousStatus: currentOrder.status,
           newStatus: 'CANCELLED',
           actorId: userId,
           actorRole: 'CUSTOMER',
           description: reason || 'Order cancelled by customer',
+          metadata: eventMetadata,
         },
       });
 
@@ -266,14 +306,14 @@ export const OrdersService = {
         data: {
           userId,
           title: 'Order Cancelled',
-          body: `Order #${order.trackingId} has been successfully cancelled.`,
+          body: `Order #${currentOrder.trackingId} has been successfully cancelled.`,
           type: 'ORDER',
           isRead: false,
         },
       });
 
       return cancelledOrder;
-    });
+    }, { maxWait: 10000, timeout: 20000 });
 
     try {
       const io = getIO();
@@ -353,7 +393,7 @@ export const OrdersService = {
       }
 
       return updated;
-    });
+    }, { maxWait: 10000, timeout: 20000 });
 
     // Emit order_status_updated to customer's private room and order room
     try {
@@ -459,7 +499,7 @@ export const OrdersService = {
       }
 
       return updated;
-    });
+    }, { maxWait: 10000, timeout: 20000 });
 
     // Emit order_status_updated to customer private room and order room
     try {
@@ -536,7 +576,7 @@ export const OrdersService = {
       });
 
       return newReview;
-    });
+    }, { maxWait: 10000, timeout: 20000 });
 
     return review;
   }

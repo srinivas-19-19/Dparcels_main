@@ -55,12 +55,12 @@ body.theme-light {
   --bg-card: #FFFFFF !important;
   --bg-secondary: #F1F5F9 !important;
   --text-primary: #0F172A !important;
-  --text-secondary: #475569 !important;
+  --text-secondary: #334155 !important;
   --border: #CBD5E1 !important;
   --border-subtle: #E2E8F0 !important;
   --bg-input: #F8FAFC !important;
   --text-main: #0F172A !important;
-  --text-muted: #64748B !important;
+  --text-muted: #475569 !important;
   --bg-dark: #F8FAFC !important;
 }
 
@@ -70,12 +70,12 @@ body.theme-dark {
   --bg-card: #121D2D !important;
   --bg-secondary: #1A273B !important;
   --text-primary: #F8FAFC !important;
-  --text-secondary: #94A3B8 !important;
+  --text-secondary: #CBD5E1 !important;
   --border: #1F2E45 !important;
   --border-subtle: #182436 !important;
   --bg-input: #0E1726 !important;
   --text-main: #F8FAFC !important;
-  --text-muted: #94A3B8 !important;
+  --text-muted: #CBD5E1 !important;
   --bg-dark: #060B13 !important;
 }
 
@@ -270,48 +270,294 @@ input:focus, select:focus, textarea:focus {
   animation: pulseGlow 2.5s infinite;
 }
 
-/* ================= RESPONSIVE DEVICE LAYOUT MEDIA QUERIES ================= */
-.responsive-phone-frame {
+/* ================= MODERN RIDER COMMAND CENTER DESIGN SYSTEM ================= */
+.rider-app-shell {
   width: 100%;
-  max-width: 430px;
-  height: 100vh;
-  max-height: 920px;
-  position: relative;
+  min-height: 100vh;
+  background-color: var(--bg-primary, #060B13);
+  color: var(--text-primary, #F8FAFC);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.9);
+  position: relative;
+  overflow-x: hidden;
+  font-family: var(--font-main, 'Plus Jakarta Sans', sans-serif);
+}
+
+.rider-top-navbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  width: 100%;
+  background: rgba(11, 19, 31, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   transition: all 0.3s ease;
 }
 
-/* Mobile Screen Viewport (<= 480px): Fits Mobile Viewport Perfectly */
-@media (max-width: 480px) {
-  .responsive-phone-frame {
-    max-width: 100% !important;
-    height: 100vh !important;
-    max-height: 100vh !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    border: none !important;
+.rider-navbar-inner {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.rider-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rider-nav-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #94A3B8;
+  padding: 8px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+}
+
+.rider-nav-btn:hover {
+  color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.rider-nav-btn.active {
+  color: #FF8A00;
+  background: rgba(255, 138, 0, 0.12);
+  border-color: rgba(255, 138, 0, 0.3);
+}
+
+.rider-content-container {
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 24px 24px 60px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  box-sizing: border-box;
+  flex: 1;
+}
+
+/* 4-KPI Grid */
+.rider-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 18px;
+  width: 100%;
+}
+
+.rider-kpi-card {
+  background: #0D1624;
+  border: 1px solid #1E2D42;
+  border-radius: 18px;
+  padding: 20px 18px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.rider-kpi-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 138, 0, 0.4);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+}
+
+/* Command Center Dual-Column Layout */
+.rider-command-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 24px;
+  width: 100%;
+  align-items: flex-start;
+}
+
+.rider-card {
+  background: #0D1624;
+  border: 1px solid #1E2D42;
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  position: relative;
+}
+
+.rider-card-highlight {
+  border-color: rgba(255, 138, 0, 0.45);
+  box-shadow: 0 12px 36px rgba(255, 138, 0, 0.12), 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* Available Orders List */
+.rider-order-item {
+  background: #111D2E;
+  border: 1px solid #1F3047;
+  border-radius: 16px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.rider-order-item:hover {
+  border-color: rgba(255, 138, 0, 0.5);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(255, 138, 0, 0.15);
+}
+
+/* Stepper Component */
+.rider-stepper-track {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: relative;
+  width: 100%;
+  margin: 12px 0 24px 0;
+}
+
+.rider-stepper-line-bg {
+  position: absolute;
+  top: 18px;
+  left: 30px;
+  right: 30px;
+  height: 3px;
+  background: #1E2D42;
+  z-index: 1;
+}
+
+.rider-stepper-line-active {
+  position: absolute;
+  top: 18px;
+  left: 30px;
+  height: 3px;
+  background: linear-gradient(90deg, #FF8A00, #FF5500);
+  z-index: 2;
+  transition: width 0.4s ease;
+}
+
+.rider-stepper-node {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+
+.rider-stepper-circle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #0D1624;
+  border: 2px solid #2A3B54;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  color: #64748B;
+  transition: all 0.3s ease;
+}
+
+.rider-stepper-node.active .rider-stepper-circle {
+  background: #FF8A00;
+  border-color: #FFFFFF;
+  color: #000000;
+  box-shadow: 0 0 16px rgba(255, 138, 0, 0.6);
+  transform: scale(1.08);
+}
+
+.rider-stepper-node.completed .rider-stepper-circle {
+  background: #10B981;
+  border-color: #10B981;
+  color: #FFFFFF;
+}
+
+/* Radar Pulse Animation */
+.radar-scanner-box {
+  position: relative;
+  width: 180px;
+  height: 180px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 20px auto;
+}
+
+.radar-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 138, 0, 0.35);
+  animation: radarWave 3s cubic-bezier(0.2, 0.8, 0.2, 1) infinite;
+}
+
+.radar-ring:nth-child(1) { width: 60px; height: 60px; animation-delay: 0s; }
+.radar-ring:nth-child(2) { width: 110px; height: 110px; animation-delay: 0.8s; }
+.radar-ring:nth-child(3) { width: 160px; height: 160px; animation-delay: 1.6s; }
+
+@keyframes radarWave {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.4);
+    opacity: 0;
   }
 }
 
-/* Tablet Screen Viewport (481px to 1023px) */
-@media (min-width: 481px) and (max-width: 1023px) {
-  .responsive-phone-frame {
-    max-width: 520px !important;
-    height: 94vh !important;
-    max-height: 920px !important;
-    border-radius: 24px !important;
+/* Backwards compatibility for responsive-phone-frame */
+.responsive-phone-frame {
+  width: 100%;
+  min-height: 100vh;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Responsive Media Queries */
+@media (max-width: 1023px) {
+  .rider-command-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .rider-kpi-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
   }
 }
 
-/* Desktop & Laptop Viewport (>= 1024px) */
-@media (min-width: 1024px) {
-  .responsive-phone-frame {
-    max-width: 580px !important;
-    height: 92vh !important;
-    max-height: 900px !important;
-    border-radius: 28px !important;
+@media (max-width: 767px) {
+  .rider-content-container {
+    padding: 14px 14px 40px 14px !important;
+  }
+  .rider-navbar-inner {
+    padding: 12px 14px !important;
+  }
+  .desktop-nav-links {
+    display: none !important;
+  }
+  .rider-kpi-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px !important;
+  }
+  .rider-card {
+    padding: 16px !important;
+    border-radius: 16px !important;
   }
 }

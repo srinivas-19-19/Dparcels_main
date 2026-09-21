@@ -129,7 +129,9 @@ export default function App() {
     <ThemeProvider>
       <LanguageProvider>
         <AuthProvider>
-          <MainContent />
+          <ErrorBoundary>
+            <MainContent />
+          </ErrorBoundary>
         </AuthProvider>
       </LanguageProvider>
     </ThemeProvider>

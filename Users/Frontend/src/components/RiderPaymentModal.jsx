@@ -104,15 +104,15 @@ export const RiderPaymentModal = ({ isOpen, onClose, order }) => {
     >
       <div
         style={{
-          background: 'var(--card-bg, #1a1a24)',
-          border: '1px solid rgba(255, 136, 0, 0.3)',
+          background: 'var(--bg-modal, #0f172a)',
+          border: '1px solid var(--border-color, rgba(255, 136, 0, 0.3))',
           borderRadius: 24,
           width: '100%',
           maxWidth: 440,
           maxHeight: '92vh',
           overflowY: 'auto',
-          boxShadow: '0 24px 64px rgba(0, 0, 0, 0.6), 0 0 32px rgba(255, 136, 0, 0.15)',
-          color: 'var(--text-main, #ffffff)',
+          boxShadow: '0 24px 64px rgba(0, 0, 0, 0.7), 0 0 32px rgba(255, 136, 0, 0.15)',
+          color: 'var(--text-main, #f8fafc)',
           position: 'relative',
           padding: 24,
           display: 'flex',
@@ -239,8 +239,8 @@ export const RiderPaymentModal = ({ isOpen, onClose, order }) => {
         {rider?.name || rider?.firstName ? (
           <div
             style={{
-              background: 'rgba(255, 255, 255, 0.04)',
-              border: '1px solid var(--border-color, rgba(255, 255, 255, 0.1))',
+              background: 'var(--input-bg, #121d2f)',
+              border: '1px solid var(--border-color, rgba(255, 255, 255, 0.12))',
               borderRadius: 14,
               padding: '10px 14px',
               display: 'flex',
@@ -266,10 +266,10 @@ export const RiderPaymentModal = ({ isOpen, onClose, order }) => {
                 <i className="fa-solid fa-motorcycle"></i>
               </div>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 800 }}>
+                <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-main, #f8fafc)' }}>
                   {rider.name || `${rider.firstName} ${rider.lastName || ''}`}
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--text-muted, #94a3b8)', fontWeight: 500 }}>
+                <div style={{ fontSize: 11, color: 'var(--text-muted, #cbd5e1)', fontWeight: 600 }}>
                   {rider.vehicleType || 'Bike'} • {rider.vehicleNumber || 'Assigned Rider'}
                   {rider.rating ? ` • ★ ${rider.rating}` : ''}
                 </div>
@@ -414,8 +414,8 @@ export const RiderPaymentModal = ({ isOpen, onClose, order }) => {
         {upiId && (
           <div
             style={{
-              background: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
+              background: 'var(--input-bg, #121d2f)',
+              border: '1px solid var(--border-color, rgba(255, 255, 255, 0.12))',
               borderRadius: 12,
               padding: '10px 14px',
               display: 'flex',
@@ -425,7 +425,7 @@ export const RiderPaymentModal = ({ isOpen, onClose, order }) => {
             }}
           >
             <div style={{ overflow: 'hidden' }}>
-              <div style={{ fontSize: 10, color: 'var(--text-muted, #94a3b8)', fontWeight: 600, textTransform: 'uppercase' }}>
+              <div style={{ fontSize: 10, color: 'var(--text-muted, #cbd5e1)', fontWeight: 700, textTransform: 'uppercase' }}>
                 Rider UPI ID
               </div>
               <div style={{ fontSize: 13, fontWeight: 800, color: '#FF8800', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>

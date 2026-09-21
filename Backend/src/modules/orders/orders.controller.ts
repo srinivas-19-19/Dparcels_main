@@ -10,7 +10,7 @@ export const createOrderController = async (req: Request, res: Response) => {
     const order = await OrdersService.createOrder(userId, req.body);
     return sendSuccess(res, 201, order, 'Order created successfully');
   } catch (error: any) {
-    return sendError(res, 500, error.message || 'Failed to create order');
+    return sendError(res, 400, error.message || 'Failed to create order');
   }
 };
 

@@ -88,6 +88,15 @@ export const HomeView = ({
   const activeOrder = dashboard?.activeOrder;
   const unreadCount = dashboard?.stats?.unreadNotificationsCount || 0;
 
+  const handleSelectServiceWithActiveCheck = (serviceType) => {
+    if (activeOrder) {
+      alert(`You already have an active order (#${activeOrder.trackingId}) in progress. Only one active order can be placed at a time.`);
+      setActiveOrderDetailId(activeOrder.id);
+      return;
+    }
+    onSelectService(serviceType);
+  };
+
   return (
     <div className="view-container">
       {/* Top Header with dynamic notification dot */}
@@ -266,13 +275,13 @@ export const HomeView = ({
 
       {/* Promo Card Carousel from Backend Banners */}
       <PromoCard
-        onClaim={() => onSelectService('food')}
+        onClaim={() => handleSelectServiceWithActiveCheck('food')}
         banners={dashboard?.banners}
       />
 
       {/* Services Grid */}
       <h3 className="section-heading">{t('services_heading')}</h3>
-      <ServiceCards onSelectService={onSelectService} />
+      <ServiceCards onSelectService={handleSelectServiceWithActiveCheck} />
 
       {/* Saved Addresses Modal directly launchable from Delivery Bar */}
       <SavedAddressesModal

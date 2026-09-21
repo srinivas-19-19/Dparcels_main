@@ -57,3 +57,28 @@ export const uploadRiderQrController = async (req: Request, res: Response) => {
     return sendError(res, 400, error.message || 'Failed to upload payment QR');
   }
 };
+
+export const getRiderOrdersController = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return sendError(res, 401, 'Unauthorized');
+
+    const orders = await RiderService.getRiderOrders(userId);
+    return sendSuccess(res, 200, orders, 'Rider orders fetched successfully');
+  } catch (error: any) {
+    return sendError(res, 400, error.message || 'Failed to fetch rider orders');
+  }
+};
+
+export const getRiderStatsController = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    if (!userId) return sendError(res, 401, 'Unauthorized');
+
+    const stats = await RiderService.getRiderStats(userId);
+    return sendSuccess(res, 200, stats, 'Rider stats fetched successfully');
+  } catch (error: any) {
+    return sendError(res, 400, error.message || 'Failed to fetch rider stats');
+  }
+};
+

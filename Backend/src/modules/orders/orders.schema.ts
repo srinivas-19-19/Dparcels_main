@@ -27,7 +27,7 @@ export const createOrderSchema = z.object({
 
 export const cancelOrderSchema = z.object({
   body: z.object({
-    reason: z.string().max(300).optional(),
+    reason: z.string().min(2, 'Reason must be at least 2 characters').max(300, 'Reason cannot exceed 300 characters').optional(),
   }),
 });
 

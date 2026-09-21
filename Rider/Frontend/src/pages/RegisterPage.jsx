@@ -149,8 +149,8 @@ const RegisterPage = () => {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validateStep4()) return;
+    if (e && e.preventDefault) e.preventDefault();
+    if (!validateStep3()) return;
 
     setIsLoading(true);
 
@@ -163,8 +163,7 @@ const RegisterPage = () => {
         password: formData.password,
         city: formData.city,
         vehicle: formData.vehicle,
-        utrNumber: formData.utrNumber
-        // we'll send a base64 encoded dummy string for files since we don't have S3 set up right now
+        utrNumber: formData.utrNumber || undefined
       };
 
       const response = await api.post('/auth/register/rider', payload);
@@ -275,8 +274,10 @@ const RegisterPage = () => {
             documents={documents}
             onFileSelect={handleFileSelect}
             errors={errors}
-            onNext={handleNextToStep4}
+            onSubmit={handleSubmit}
+            onNext={handleSubmit}
             onBack={handleBack}
+            isLoading={isLoading}
           />
         )}
 

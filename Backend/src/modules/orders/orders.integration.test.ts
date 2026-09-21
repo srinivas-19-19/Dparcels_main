@@ -268,6 +268,9 @@ async function runOrdersIntegrationTests() {
       body: JSON.stringify(orderPayload),
     });
     const createData = await createRes.json();
+    if (createRes.status !== 201) {
+      console.error('DEBUG createData:', createRes.status, createData);
+    }
     assert(createRes.status === 201, 'POST /orders returns 201 Created');
     assert(createData.success === true, 'Response success is true');
 
@@ -415,6 +418,9 @@ async function runOrdersIntegrationTests() {
       body: JSON.stringify({ reason: 'Ordered wrong items' }),
     });
     const cancelData = await cancelRes.json();
+    if (cancelRes.status !== 200) {
+      console.error('DEBUG cancelData:', cancelRes.status, cancelData);
+    }
     assert(cancelRes.status === 200, 'POST /orders/:id/cancel returns 200');
     assert(cancelData.data.status === 'CANCELLED', 'Order status is now CANCELLED');
 
@@ -444,6 +450,83 @@ async function runOrdersIntegrationTests() {
     });
     assert(doubleCancelRes.status === 400, 'Attempting to cancel already CANCELLED order rejected with 400');
 
+    assert(doubleCancelRes.status === 400, 'Attempting to cancel already CANCELLED order rejected with 400');
+
+    // Test 23b: Cannot cancel DELIVERED order
+    const deliveredOrder = await prisma.order.create({
+      data: {
+        trackingId: `ord_del_${timestamp}`,
+        customerProfileId: (await prisma.customerProfile.findUnique({ where: { userId: userA.id } }))!.id,
+        pickupAddress: 'Pickup', pickupLat: 0, pickupLng: 0,
+        dropAddress: 'Drop', dropLat: 0, dropLng: 0,
+        distanceKm: 1, estimatedTimeMins: 10, serviceType: 'STANDARD',
+        status: 'DELIVERED',
+        basePrice: 50, distancePrice: 10, totalAmount: 60,
+      }
+    });
+    const delCancelRes = await fetch(`${baseUrl}/api/v1/orders/${deliveredOrder.id}/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokenA}` },
+      body: JSON.stringify({ reason: 'Try to cancel delivered' }),
+    });
+    assert(delCancelRes.status === 400, 'Cannot cancel DELIVERED order');
+
+    // Test 23c: Concurrency / Double Click Safety
+    const concOrder = await prisma.order.create({
+      data: {
+        trackingId: `ord_conc_${timestamp}`,
+        customerProfileId: (await prisma.customerProfile.findUnique({ where: { userId: userA.id } }))!.id,
+        pickupAddress: 'Pickup', pickupLat: 0, pickupLng: 0,
+        dropAddress: 'Drop', dropLat: 0, dropLng: 0,
+        distanceKm: 1, estimatedTimeMins: 10, serviceType: 'STANDARD',
+        status: 'CONFIRMED',
+        basePrice: 50, distancePrice: 10, totalAmount: 60,
+      }
+    });
+    const concResponses = await Promise.all([
+      fetch(`${baseUrl}/api/v1/orders/${concOrder.id}/cancel`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokenA}` },
+        body: JSON.stringify({ reason: 'Concurrency 1' }),
+      }),
+      fetch(`${baseUrl}/api/v1/orders/${concOrder.id}/cancel`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokenA}` },
+        body: JSON.stringify({ reason: 'Concurrency 2' }),
+      }),
+    ]);
+    const successCount = concResponses.filter(r => r.status === 200).length;
+    const failCount = concResponses.filter(r => r.status === 400).length;
+    assert(successCount === 1, 'Only one cancellation succeeds concurrently');
+    assert(failCount === 1, 'The other cancellation is rejected');
+
+    const concEvents = await prisma.orderEvent.count({ where: { orderId: concOrder.id, newStatus: 'CANCELLED' } });
+    assert(concEvents === 1, 'Exactly one CANCELLED event is created');
+
+    // Test 23d: Paid order records refundStatus metadata
+    const paidOrder = await prisma.order.create({
+      data: {
+        trackingId: `ord_paid_${timestamp}`,
+        customerProfileId: (await prisma.customerProfile.findUnique({ where: { userId: userA.id } }))!.id,
+        pickupAddress: 'Pickup', pickupLat: 0, pickupLng: 0,
+        dropAddress: 'Drop', dropLat: 0, dropLng: 0,
+        distanceKm: 1, estimatedTimeMins: 10, serviceType: 'STANDARD',
+        status: 'CONFIRMED',
+        basePrice: 50, distancePrice: 10, totalAmount: 60,
+        payment: {
+          create: {
+            amount: 60, status: 'PAID', currency: 'INR'
+          }
+        }
+      }
+    });
+    await fetch(`${baseUrl}/api/v1/orders/${paidOrder.id}/cancel`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokenA}` },
+      body: JSON.stringify({ reason: 'Paid cancel' }),
+    });
+    const paidEvent = await prisma.orderEvent.findFirst({
+      where: { orderId: paidOrder.id, newStatus: 'CANCELLED' }
+    });
+    assert((paidEvent?.metadata as any)?.refundStatus === 'PENDING', 'refundStatus: PENDING recorded in metadata');
+
     // ----------------------------------------------------
     // 9. RIDER AVAILABLE ORDERS FEED
     // ----------------------------------------------------
@@ -468,6 +551,9 @@ async function runOrdersIntegrationTests() {
       }),
     });
     const orderBData = await orderBRes.json();
+    if (orderBRes.status !== 201) {
+      console.error('DEBUG orderBData:', orderBRes.status, orderBData);
+    }
     assert(orderBRes.status === 201, 'Customer B order created with 201');
 
     // Test 25: Rider queries available orders

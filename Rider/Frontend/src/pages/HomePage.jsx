@@ -1,69 +1,77 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import confetti from 'canvas-confetti';
 import { useLanguage } from '../context/LanguageContext';
 import { useTheme } from '../context/ThemeContext';
-import { 
-  Bell, 
-  MapPin, 
-  Package, 
-  Star, 
-  Phone, 
-  AlertTriangle, 
-  Gift, 
-  Fuel, 
-  X,
-  Truck,
-  Navigation,
-  Flame,
-  User,
-  Copy,
-  Check,
-  Share2,
-  TrendingUp,
-  ShieldAlert
-} from 'lucide-react';
-import RealMap from '../components/RealMap';
 import { useAuth } from '../context/AuthContext';
 import api from '../utils/api';
+import RealMap from '../components/RealMap';
+import { 
+  Package, 
+  MapPin, 
+  Navigation, 
+  Phone, 
+  CheckCircle2, 
+  Star, 
+  Clock, 
+  AlertCircle, 
+  RefreshCw, 
+  LogOut, 
+  Power, 
+  ShieldCheck, 
+  Truck, 
+  ExternalLink, 
+  ChevronRight, 
+  IndianRupee, 
+  Radio, 
+  Sparkles,
+  ArrowRight,
+  Send,
+  SlidersHorizontal,
+  FileText
+} from 'lucide-react';
 
 const HomePage = () => {
   const navigate = useNavigate();
   const { t } = useLanguage();
   const { isLight, themeColors } = useTheme();
-  const { socket } = useAuth();
+  const { user, logout, socket } = useAuth();
 
   // State Management
   const [isOnline, setIsOnline] = useState(true);
-  const [showNotificationModal, setShowNotificationModal] = useState(false);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [showMapModal, setShowMapModal] = useState(false);
-  const [showSosModal, setShowSosModal] = useState(false);
-  const [showReferModal, setShowReferModal] = useState(false);
-  const [showEarningsModal, setShowEarningsModal] = useState(false);
-  const [showFuelModal, setShowFuelModal] = useState(false);
-  const [copied, setCopied] = useState(false);
-  
-  // Rider & Location Data
-  const [riderPos, setRiderPos] = useState([15.6322, 77.2728]);
-  const pickupPos = [15.6350, 77.2750]; // DParcels Hub, Adoni
-  const dropPos = [15.6260, 77.2710];   // Railway Station, Adoni
-
-  const [routePoints, setRoutePoints] = useState([
-    [15.6350, 77.2750],
-    [15.6340, 77.2740],
-    [15.6322, 77.2728],
-    [15.6290, 77.2720],
-    [15.6260, 77.2710]
-  ]);
+  const [stats, setStats] = useState({
+    todayEarnings: 0,
+    tripsCompleted: 0,
+    rating: 5.0,
+    city: 'Adoni Hub',
+    isOnline: true
+  });
 
   const [availableOrders, setAvailableOrders] = useState([]);
-  const [activeOrders, setActiveOrders] = useState([]);
+  const [activeOrder, setActiveOrder] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [isAcceptingId, setIsAcceptingId] = useState(null);
+
+  // Rider & Hub Coordinate Defaults (Adoni, AP)
+  const defaultRiderPos = [15.6322, 77.2728];
+  const [riderPos, setRiderPos] = useState(defaultRiderPos);
 
   useEffect(() => {
-    fetchOrders();
+    fetchDashboardData();
 
+    // Auto-polling fallback every 6 seconds to keep feed fresh
+    const pollInterval = setInterval(() => {
+      fetchAvailableOrdersOnly();
+    }, 6000);
+
+    return () => clearInterval(pollInterval);
+  }, []);
+
+  // Socket.IO Real-time Events
+  useEffect(() => {
     if (socket) {
-      // Explicitly ensure rider joins 'riders' room upon connection
       socket.emit('join_riders');
 
       const handleNewOrder = (incomingData) => {
@@ -83,7 +91,7 @@ const HomePage = () => {
       };
 
       const handleStatusUpdate = () => {
-        fetchOrders();
+        fetchDashboardData();
       };
 
       socket.on('new_order_available', handleNewOrder);
@@ -100,1313 +108,1094 @@ const HomePage = () => {
     }
   }, [socket]);
 
-  const fetchOrders = async () => {
+  const fetchDashboardData = async () => {
     try {
-      const [availableRes, historyRes] = await Promise.all([
-        api.get('/orders/available'),
-        api.get('/orders')
+      setRefreshing(true);
+      const [availableRes, riderOrdersRes, statsRes] = await Promise.all([
+        api.get('/orders/available').catch(() => ({ data: { data: [] } })),
+        api.get('/rider/orders').catch(() => ({ data: { data: [] } })),
+        api.get('/rider/stats').catch(() => ({ data: { data: null } }))
       ]);
+
       setAvailableOrders(availableRes.data?.data || []);
-      const history = historyRes.data?.data || [];
-      setActiveOrders(history.filter(o => 
-        ['ACCEPTED', 'RIDER_ASSIGNED', 'IN_TRANSIT', 'ARRIVED_PICKUP', 'PICKED_UP', 'ARRIVED'].includes(o.status)
-      ));
+      
+      const orders = riderOrdersRes.data?.data || [];
+      const currentActive = orders.find((o) =>
+        ['ACCEPTED', 'RIDER_ASSIGNED', 'ARRIVED_PICKUP', 'PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(o.status)
+      );
+      setActiveOrder(currentActive || null);
+
+      if (statsRes.data?.data) {
+        setStats(statsRes.data.data);
+        setIsOnline(statsRes.data.data.isOnline ?? true);
+      }
     } catch (error) {
-      console.error('Failed to fetch orders:', error);
+      console.error('Failed to load dashboard data:', error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const fetchAvailableOrdersOnly = async () => {
+    try {
+      const res = await api.get('/orders/available');
+      if (res.data?.data) {
+        setAvailableOrders(res.data.data);
+      }
+    } catch {
+      // Background poll silently fails if offline
+    }
+  };
+
+  const handleToggleOnline = async () => {
+    const nextOnline = !isOnline;
+    setIsOnline(nextOnline);
+    try {
+      await api.patch('/rider/availability', { isOnline: nextOnline });
+      setStats((prev) => ({ ...prev, isOnline: nextOnline }));
+    } catch (err) {
+      console.error('Failed to update availability:', err);
+      setIsOnline(!nextOnline);
+      alert(err.response?.data?.message || 'Failed to update availability status.');
     }
   };
 
   const handleAcceptOrder = async (orderId) => {
     try {
+      setIsAcceptingId(orderId);
       const res = await api.post(`/orders/${orderId}/accept`);
-      const acceptedOrder = res.data?.data || availableOrders.find((o) => o.id === orderId);
+      const accepted = res.data?.data || availableOrders.find((o) => o.id === orderId);
 
-      // Remove from available list
+      // Celebration effect
+      confetti({
+        particleCount: 70,
+        spread: 60,
+        origin: { y: 0.7 }
+      });
+
+      // Remove from available and set as active
       setAvailableOrders((prev) => prev.filter((o) => o.id !== orderId));
-
-      // Move into active trip state
-      if (acceptedOrder) {
-        setActiveOrders((prev) => [{ ...acceptedOrder, status: 'ACCEPTED' }, ...prev]);
+      if (accepted) {
+        setActiveOrder({ ...accepted, status: 'ACCEPTED' });
       }
 
-      navigate('/trip-accepted', { state: { order: acceptedOrder || { id: orderId, status: 'ACCEPTED' } } });
+      await fetchDashboardData();
     } catch (error) {
       console.error('Failed to accept order:', error);
-      alert(error.response?.data?.message || 'Failed to accept order');
+      alert(error.response?.data?.message || 'Failed to accept order. It may have already been claimed.');
+      fetchDashboardData();
+    } finally {
+      setIsAcceptingId(null);
     }
   };
 
-  const handleCopyCode = () => {
-    navigator.clipboard.writeText('DPARCSREENU100');
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleAdvanceStatus = async (orderId, nextStatus) => {
+    try {
+      setIsUpdatingStatus(true);
+      const res = await api.post(`/orders/${orderId}/status`, { status: nextStatus });
+      const updated = res.data?.data;
+
+      if (nextStatus === 'DELIVERED') {
+        confetti({
+          particleCount: 120,
+          spread: 80,
+          origin: { y: 0.6 }
+        });
+        setActiveOrder(null);
+        await fetchDashboardData();
+      } else {
+        setActiveOrder((prev) => prev ? { ...prev, status: nextStatus } : updated);
+      }
+    } catch (error) {
+      console.error('Failed to update order status:', error);
+      alert(error.response?.data?.message || 'Failed to update status.');
+    } finally {
+      setIsUpdatingStatus(false);
+    }
   };
 
-  return (
-    <div style={{
-      width: '100%',
-      minHeight: '100vh',
-      backgroundColor: themeColors.bg,
-      color: themeColors.text,
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '0',
-      position: 'relative',
-      fontFamily: 'var(--font-main, "Plus Jakarta Sans", sans-serif)',
-      transition: 'all 0.3s ease',
-      userSelect: 'none'
-    }}>
-      {/* Phone Screen Container Frame */}
-      <div className="responsive-phone-frame" style={{
-        backgroundColor: themeColors.frameBg,
-        border: `1px solid ${themeColors.border}`
-      }}>
+  // Helper calculation for active order stepper stage
+  const getActiveStageIndex = (status) => {
+    switch (status) {
+      case 'ACCEPTED':
+      case 'RIDER_ASSIGNED':
+        return 1;
+      case 'ARRIVED_PICKUP':
+        return 2;
+      case 'PICKED_UP':
+      case 'IN_TRANSIT':
+      case 'OUT_FOR_DELIVERY':
+        return 3;
+      case 'DELIVERED':
+        return 4;
+      default:
+        return 1;
+    }
+  };
 
-        {/* ================= 1. TOP HEADER BAR ================= */}
-        <div style={{
-          backgroundColor: themeColors.headerBg,
-          borderBottom: `1px solid ${themeColors.border}`,
-          padding: '14px 16px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          zIndex: 20
-        }}>
-          {/* DPARCELS Brand Logo */}
-          <div style={{ textTransform: 'uppercase', textAlign: 'left' }}>
-            <div style={{ fontSize: '18px', fontWeight: '900', letterSpacing: '0.04em', color: themeColors.text, lineHeight: '1' }}>
-              <span style={{ color: '#FF8A00' }}>D</span>PARCELS
+  // Compute map coordinates from active order or defaults
+  const pickupCoords = activeOrder?.pickupCoordinates 
+    ? [activeOrder.pickupCoordinates.lat, activeOrder.pickupCoordinates.lng]
+    : [15.6350, 77.2750];
+
+  const dropCoords = activeOrder?.dropCoordinates
+    ? [activeOrder.dropCoordinates.lat, activeOrder.dropCoordinates.lng]
+    : [15.6260, 77.2710];
+
+  const riderName = user?.riderProfile?.firstName
+    ? `${user.riderProfile.firstName} ${user.riderProfile.lastName || ''}`.trim()
+    : (user?.name || 'Rider Partner');
+
+  const partnerCode = user?.riderProfile?.id 
+    ? `#${user.riderProfile.id.slice(-4).toUpperCase()}` 
+    : '#RIDER';
+
+  return (
+    <div className="rider-app-shell">
+      {/* ================= 1. STICKY TOP NAVBAR HUD ================= */}
+      <header className="rider-top-navbar">
+        <div className="rider-navbar-inner">
+          {/* Brand Logo & Live Hub Beacon */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div style={{ fontSize: '20px', fontWeight: '900', letterSpacing: '0.04em', color: '#FFFFFF', lineHeight: 1 }}>
+                <span style={{ color: '#FF8A00' }}>D</span>PARCELS
+              </div>
+              <span style={{ fontSize: '10px', fontWeight: '800', letterSpacing: '0.14em', color: '#FF8A00', marginTop: '3px' }}>
+                DISPATCH COMMAND
+              </span>
             </div>
-            <div style={{ fontSize: '9px', fontWeight: '800', letterSpacing: '0.14em', color: themeColors.subText, marginTop: '2px' }}>
-              {t('riderPartner')}
+
+            {/* Live Station Hub Indicator */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              backgroundColor: 'rgba(255, 255, 255, 0.05)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              padding: '4px 10px',
+              borderRadius: '20px',
+              fontSize: '11px',
+              fontWeight: '700',
+              color: '#94A3B8'
+            }}>
+              <span style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                backgroundColor: isOnline ? '#10B981' : '#EF4444',
+                boxShadow: isOnline ? '0 0 8px #10B981' : 'none'
+              }} />
+              <span>{stats?.city || 'Adoni Central Hub'}</span>
             </div>
           </div>
 
-          {/* Right: Notification Bell Button with Badge Count */}
-          <button 
-            onClick={() => setShowNotificationModal(true)}
-            style={{
-              width: '42px',
-              height: '42px',
-              borderRadius: '50%',
-              backgroundColor: themeColors.cardBg,
-              border: `1px solid ${themeColors.border}`,
+          {/* Desktop Navigation Links */}
+          <nav className="desktop-nav-links rider-nav-links">
+            <Link to="/home" className="rider-nav-btn active">
+              <Truck size={16} />
+              <span>Command Center</span>
+            </Link>
+            <Link to="/history" className="rider-nav-btn">
+              <Clock size={16} />
+              <span>Trip History</span>
+            </Link>
+            <Link to="/profile" className="rider-nav-btn">
+              <ShieldCheck size={16} />
+              <span>Profile & Vehicle</span>
+            </Link>
+            <Link to="/settings" className="rider-nav-btn">
+              <SlidersHorizontal size={16} />
+              <span>Settings</span>
+            </Link>
+          </nav>
+
+          {/* Right Controls: Online/Offline Switch & Profile Chip */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            {/* Online / Offline Toggle Button */}
+            <button
+              onClick={handleToggleOnline}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 14px',
+                borderRadius: '14px',
+                backgroundColor: isOnline ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                border: `1px solid ${isOnline ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'}`,
+                color: isOnline ? '#10B981' : '#EF4444',
+                fontSize: '12px',
+                fontWeight: '800',
+                cursor: 'pointer',
+                transition: 'all 0.2s ease'
+              }}
+              title={isOnline ? 'Click to go offline' : 'Click to go online'}
+            >
+              <Power size={14} />
+              <span>{isOnline ? 'ONLINE' : 'OFFLINE'}</span>
+            </button>
+
+            {/* Rider Profile Card & Logout */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              backgroundColor: '#111D2E',
+              border: '1px solid #1F3047',
+              padding: '5px 12px',
+              borderRadius: '14px'
+            }}>
+              <div style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                backgroundColor: '#FF8A00',
+                color: '#000000',
+                fontWeight: '900',
+                fontSize: '13px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}>
+                {riderName.charAt(0).toUpperCase()}
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ fontSize: '13px', fontWeight: '800', color: '#FFFFFF', lineHeight: 1.1 }}>
+                  {riderName}
+                </span>
+                <span style={{ fontSize: '10px', fontWeight: '700', color: '#FF8A00', marginTop: '2px' }}>
+                  ★ {stats?.rating ? Number(stats.rating).toFixed(1) : '5.0'} • {partnerCode}
+                </span>
+              </div>
+
+              <button
+                onClick={logout}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#64748B',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  marginLeft: '4px'
+                }}
+                title="Log out"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* ================= 2. MAIN VIEWPORT CONTENT ================= */}
+      <main className="rider-content-container">
+        {/* TOP 4-METRIC KPI HUD STRIP */}
+        <section className="rider-kpi-grid">
+          {/* KPI 1: Today Earnings */}
+          <div className="rider-kpi-card" onClick={() => navigate('/history')} style={{ cursor: 'pointer' }}>
+            <div style={{
+              width: '46px',
+              height: '46px',
+              borderRadius: '14px',
+              backgroundColor: 'rgba(255, 138, 0, 0.12)',
+              border: '1px solid rgba(255, 138, 0, 0.3)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: themeColors.text,
-              position: 'relative',
-              cursor: 'pointer'
-            }}
-          >
-            <Bell size={20} />
-            {notificationsEnabled && (
-              <span style={{
-                position: 'absolute',
-                top: '8px',
-                right: '8px',
-                width: '14px',
-                height: '14px',
-                borderRadius: '50%',
-                backgroundColor: '#FF8A00',
-                color: '#000000',
-                fontSize: '9px',
-                fontWeight: '900',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: '0 0 8px rgba(255, 138, 0, 0.6)'
-              }}>
-                3
-              </span>
-            )}
-          </button>
-        </div>
-
-        {/* ================= MAIN SCROLLABLE CONTENT AREA ================= */}
-        <div style={{
-          flex: 1,
-          padding: '14px 14px 80px 14px',
-          overflowY: 'auto',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '14px'
-        }}>
-
-          {/* 2. YOU ARE ONLINE STATUS BANNER CARD */}
-          <div style={{
-            backgroundColor: themeColors.cardBg,
-            border: `1px solid ${themeColors.border}`,
-            borderRadius: '20px',
-            padding: '14px 16px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            boxShadow: isLight ? '0 4px 14px rgba(0,0,0,0.06)' : '0 8px 24px rgba(0,0,0,0.4)'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-              {/* Rider Avatar with Green Online Pulse Dot */}
-              <div style={{ position: 'relative' }}>
-                <div style={{
-                  width: '48px',
-                  height: '48px',
-                  borderRadius: '50%',
-                  backgroundColor: themeColors.cardSecondary,
-                  border: '2px solid #FF8A00',
-                  overflow: 'hidden',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
-                  <svg width="48" height="48" viewBox="0 0 100 100" fill="none">
-                    <rect width="100" height="100" fill="#1E1E1E" />
-                    <circle cx="50" cy="42" r="22" fill="#E0A96D" />
-                    <path d="M 32 40 Q 50 64 68 40 C 68 56 32 56 32 40 Z" fill="#2D231E" />
-                    <circle cx="43" cy="38" r="2.5" fill="#1E1E1E" />
-                    <circle cx="57" cy="38" r="2.5" fill="#1E1E1E" />
-                    <path d="M 44 48 Q 50 54 56 48" stroke="#FFFFFF" strokeWidth="2" fill="none" />
-                    <path d="M 20 100 C 20 70 80 70 80 100 Z" fill="#FF8A00" />
-                  </svg>
-                </div>
-                <span style={{
-                  position: 'absolute',
-                  bottom: '0',
-                  right: '0',
-                  width: '14px',
-                  height: '14px',
-                  borderRadius: '50%',
-                  backgroundColor: isOnline ? '#10B981' : '#EF4444',
-                  border: `2px solid ${themeColors.frameBg}`,
-                  boxShadow: isOnline ? '0 0 10px #10B981' : 'none'
-                }} />
-              </div>
-
-              <div>
-                <div style={{ fontSize: '16px', fontWeight: '800', color: themeColors.text }}>
-                  {isOnline ? t('youAreOnline') : t('youAreOffline')}
-                </div>
-                <div style={{ fontSize: '11px', color: themeColors.subText, marginTop: '2px' }}>
-                  {isOnline ? t('readyToAcceptTrips') : t('goOnlineToReceive')}
-                </div>
-              </div>
-            </div>
-
-            {/* Toggle Switch Button */}
-            <button
-              onClick={() => setIsOnline(!isOnline)}
-              style={{
-                width: '52px',
-                height: '28px',
-                borderRadius: '14px',
-                backgroundColor: isOnline ? '#FF8A00' : themeColors.border,
-                border: 'none',
-                position: 'relative',
-                cursor: 'pointer',
-                transition: 'background-color 0.25s ease',
-                boxShadow: isOnline ? '0 0 12px rgba(255, 138, 0, 0.4)' : 'none'
-              }}
-            >
-              <div style={{
-                width: '22px',
-                height: '22px',
-                borderRadius: '50%',
-                backgroundColor: '#FFFFFF',
-                position: 'absolute',
-                top: '3px',
-                left: isOnline ? '27px' : '3px',
-                transition: 'left 0.25s ease',
-                boxShadow: '0 2px 6px rgba(0,0,0,0.5)'
-              }} />
-            </button>
-          </div>
-
-          {/* 3. 4 KEY STATS GRID (2x2 CARDS) */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: '12px',
-            width: '100%'
-          }}>
-            {/* Card 1: Today Earnings */}
-            <div 
-              onClick={() => setShowEarningsModal(true)}
-              style={{
-                backgroundColor: themeColors.cardBg,
-                border: `1px solid ${themeColors.border}`,
-                borderRadius: '18px',
-                padding: '16px 14px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                cursor: 'pointer'
-              }}
-            >
-              <div style={{
-                width: '42px',
-                height: '42px',
-                borderRadius: '50%',
-                backgroundColor: themeColors.cardSecondary,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: themeColors.subText,
-                fontSize: '18px',
-                fontWeight: '800',
-                flexShrink: 0
-              }}>
-                ₹
-              </div>
-              <div>
-                <div style={{ fontSize: '18px', fontWeight: '900', color: themeColors.text }}>₹860</div>
-                <div style={{ fontSize: '11px', color: themeColors.subText, marginTop: '2px' }}>{t('todayEarnings')}</div>
-              </div>
-            </div>
-
-            {/* Card 2: Trips Completed */}
-            <div 
-              onClick={() => navigate('/history')}
-              style={{
-                backgroundColor: themeColors.cardBg,
-                border: `1px solid ${themeColors.border}`,
-                borderRadius: '18px',
-                padding: '16px 14px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                cursor: 'pointer'
-              }}
-            >
-              <div style={{
-                width: '42px',
-                height: '42px',
-                borderRadius: '50%',
-                backgroundColor: themeColors.cardSecondary,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: themeColors.subText,
-                flexShrink: 0
-              }}>
-                <Package size={20} />
-              </div>
-              <div>
-                <div style={{ fontSize: '18px', fontWeight: '900', color: themeColors.text }}>25</div>
-                <div style={{ fontSize: '11px', color: themeColors.subText, marginTop: '2px' }}>{t('tripsCompleted')}</div>
-              </div>
-            </div>
-
-            {/* Card 3: Rating */}
-            <div style={{
-              backgroundColor: themeColors.cardBg,
-              border: `1px solid ${themeColors.border}`,
-              borderRadius: '18px',
-              padding: '16px 14px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px'
+              color: '#FF8A00',
+              fontWeight: '900',
+              fontSize: '20px',
+              flexShrink: 0
             }}>
-              <div style={{
-                width: '42px',
-                height: '42px',
-                borderRadius: '50%',
-                backgroundColor: themeColors.cardSecondary,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#FF8A00',
-                flexShrink: 0
-              }}>
-                <Star size={20} fill="#FF8A00" color="#FF8A00" />
-              </div>
-              <div>
-                <div style={{ fontSize: '18px', fontWeight: '900', color: themeColors.text }}>4.8</div>
-                <div style={{ fontSize: '11px', color: themeColors.subText, marginTop: '2px' }}>{t('rating')}</div>
-              </div>
+              ₹
             </div>
-
-            {/* Card 4: Location */}
-            <div 
-              onClick={() => setShowMapModal(true)}
-              style={{
-                backgroundColor: themeColors.cardBg,
-                border: `1px solid ${themeColors.border}`,
-                borderRadius: '18px',
-                padding: '16px 14px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '12px',
-                cursor: 'pointer'
-              }}
-            >
-              <div style={{
-                width: '42px',
-                height: '42px',
-                borderRadius: '50%',
-                backgroundColor: themeColors.cardSecondary,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: themeColors.subText,
-                flexShrink: 0
-              }}>
-                <MapPin size={20} />
+            <div>
+              <div style={{ fontSize: '22px', fontWeight: '900', color: '#FFFFFF', lineHeight: 1.1 }}>
+                ₹{stats?.todayEarnings ?? 0}
               </div>
-              <div>
-                <div style={{ fontSize: '15px', fontWeight: '800', color: themeColors.text }}>{t('location')}</div>
-                <div style={{ fontSize: '11px', color: themeColors.subText, marginTop: '2px' }}>Adoni Hub</div>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', marginTop: '3px' }}>
+                Today's Earnings (80% Cut)
               </div>
             </div>
           </div>
 
-          {/* 4. ACTIVE TRIP CARD */}
-          <div style={{
-            backgroundColor: themeColors.cardBg,
-            border: `1px solid ${themeColors.border}`,
-            borderRadius: '22px',
-            padding: '18px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '14px',
-            boxShadow: isLight ? '0 4px 16px rgba(0,0,0,0.06)' : '0 8px 24px rgba(0,0,0,0.5)'
-          }}>
-            {/* Header: Active Trip Title & Status Pill */}
+          {/* KPI 2: Active Dispatch Status */}
+          <div className="rider-kpi-card">
             <div style={{
+              width: '46px',
+              height: '46px',
+              borderRadius: '14px',
+              backgroundColor: activeOrder ? 'rgba(255, 138, 0, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+              border: `1px solid ${activeOrder ? 'rgba(255, 138, 0, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between'
+              justifyContent: 'center',
+              color: activeOrder ? '#FF8A00' : '#10B981',
+              flexShrink: 0
             }}>
-              <div>
-                <h3 style={{ fontSize: '18px', fontWeight: '900', color: themeColors.text, margin: 0 }}>
-                  {t('activeTrip')}
-                </h3>
-                <div style={{ fontSize: '12px', color: themeColors.subText, marginTop: '2px' }}>
-                  {activeOrders[0] 
-                    ? `ID - ${activeOrders[0].trackingId || (activeOrders[0].id ? '#' + activeOrders[0].id.substring(0,6).toUpperCase() : '#DP1024')}`
-                    : 'ID - #DP1024'}
-                </div>
+              <Package size={22} />
+            </div>
+            <div>
+              <div style={{ fontSize: '18px', fontWeight: '900', color: activeOrder ? '#FF8A00' : '#10B981', lineHeight: 1.1 }}>
+                {activeOrder ? (activeOrder.trackingId || 'ACTIVE TRIP') : (isOnline ? 'READY FOR ORDERS' : 'OFFLINE')}
               </div>
-
-              {/* Status Badge Pill */}
-              <div style={{
-                backgroundColor: '#FF8A00',
-                color: '#000000',
-                fontSize: '12px',
-                fontWeight: '900',
-                padding: '8px 16px',
-                borderRadius: '20px',
-                boxShadow: '0 4px 14px rgba(255, 138, 0, 0.35)'
-              }}>
-                {activeOrders[0]?.status || t('inTransit')}
+              <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', marginTop: '3px' }}>
+                {activeOrder ? (activeOrder.status?.replace(/_/g, ' ') || 'In Progress') : 'Current Shift Status'}
               </div>
             </div>
-
-            {/* Customer Details Row */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              paddingTop: '4px'
-            }}>
-              <div>
-                <div style={{ fontSize: '11px', color: themeColors.subText, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{t('customer')}</div>
-                <div style={{ fontSize: '16px', fontWeight: '800', color: themeColors.text, marginTop: '2px' }}>
-                  {activeOrders[0]?.customer?.firstName 
-                    ? `${activeOrders[0].customer.firstName} ${activeOrders[0].customer.lastName || ''}`
-                    : (activeOrders[0]?.customerName || 'Ahmed Rahman')}
-                </div>
-              </div>
-
-              {/* Call Phone Button */}
-              <a
-                href={`tel:${activeOrders[0]?.customer?.phone || '9876543210'}`}
-                style={{
-                  width: '38px',
-                  height: '38px',
-                  borderRadius: '50%',
-                  backgroundColor: themeColors.cardSecondary,
-                  border: `1px solid ${themeColors.border}`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: themeColors.text,
-                  textDecoration: 'none'
-                }}
-              >
-                <Phone size={18} />
-              </a>
-            </div>
-
-            {/* Progress Route Line */}
-            <div style={{ position: 'relative', margin: '8px 0' }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                position: 'relative'
-              }}>
-                {/* Background gray line */}
-                <div style={{
-                  position: 'absolute',
-                  left: '12px',
-                  right: '12px',
-                  top: '50%',
-                  height: '4px',
-                  backgroundColor: themeColors.border,
-                  transform: 'translateY(-50%)',
-                  zIndex: 1
-                }} />
-
-                {/* Progress orange line */}
-                <div style={{
-                  position: 'absolute',
-                  left: '12px',
-                  width: '45%',
-                  top: '50%',
-                  height: '4px',
-                  backgroundColor: '#FF8A00',
-                  transform: 'translateY(-50%)',
-                  zIndex: 2
-                }} />
-
-                {/* Pickup node */}
-                <div style={{
-                  width: '20px',
-                  height: '20px',
-                  borderRadius: '50%',
-                  backgroundColor: '#FF8A00',
-                  border: `3px solid ${themeColors.cardBg}`,
-                  zIndex: 3
-                }} />
-
-                {/* Center Km Badge */}
-                <div style={{
-                  backgroundColor: themeColors.cardSecondary,
-                  border: `1px solid ${themeColors.border}`,
-                  borderRadius: '14px',
-                  padding: '4px 14px',
-                  fontSize: '11px',
-                  fontWeight: '800',
-                  color: themeColors.text,
-                  zIndex: 3
-                }}>
-                  {activeOrders[0]?.distanceKm ? `${activeOrders[0].distanceKm}km` : '2.4km'}
-                </div>
-
-                {/* Delivery node */}
-                <div style={{
-                  width: '20px',
-                  height: '20px',
-                  borderRadius: '50%',
-                  backgroundColor: themeColors.border,
-                  border: `3px solid ${themeColors.cardBg}`,
-                  zIndex: 3
-                }} />
-              </div>
-
-              {/* Address labels below line */}
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                marginTop: '10px'
-              }}>
-                <div style={{ textAlign: 'left', maxWidth: '45%' }}>
-                  <div style={{ fontSize: '10px', color: themeColors.subText }}>{t('pickup')}</div>
-                  <div style={{ fontSize: '12px', fontWeight: '700', color: themeColors.text, marginTop: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {activeOrders[0]?.pickupAddress || activeOrders[0]?.pickupLocation || 'DParcels Hub, Adoni'}
-                  </div>
-                </div>
-
-                <div style={{ textAlign: 'right', maxWidth: '45%' }}>
-                  <div style={{ fontSize: '10px', color: themeColors.subText }}>{t('delivery')}</div>
-                  <div style={{ fontSize: '12px', fontWeight: '700', color: themeColors.text, marginTop: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {activeOrders[0]?.dropAddress || activeOrders[0]?.dropLocation || 'Railway Station, Adoni'}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Active Trip Action Button */}
-            <button
-              onClick={() => navigate('/trip-accepted', { state: { order: activeOrders[0] } })}
-              className="primary-orange-btn"
-              style={{
-                width: '100%',
-                padding: '12px',
-                fontSize: '14px',
-                borderRadius: '14px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                marginTop: '4px'
-              }}
-            >
-              <Navigation size={16} />
-              <span>{t('viewTrack')}</span>
-            </button>
           </div>
 
-          {/* 5. NEW TRIP REQUESTS SECTION */}
-          <div style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '12px',
-            marginTop: '2px'
-          }}>
-            {/* Section Header */}
+          {/* KPI 3: Trips Completed Today */}
+          <div className="rider-kpi-card" onClick={() => navigate('/history')} style={{ cursor: 'pointer' }}>
             <div style={{
+              width: '46px',
+              height: '46px',
+              borderRadius: '14px',
+              backgroundColor: 'rgba(59, 130, 246, 0.12)',
+              border: '1px solid rgba(59, 130, 246, 0.3)',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'space-between'
+              justifyContent: 'center',
+              color: '#3B82F6',
+              flexShrink: 0
             }}>
-              <h3 style={{ fontSize: '16px', fontWeight: '800', color: themeColors.text, margin: 0 }}>
-                {t('newTripRequests')}
-              </h3>
+              <CheckCircle2 size={22} />
             </div>
+            <div>
+              <div style={{ fontSize: '22px', fontWeight: '900', color: '#FFFFFF', lineHeight: 1.1 }}>
+                {stats?.tripsCompleted ?? 0} Trips
+              </div>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', marginTop: '3px' }}>
+                Completed Deliveries Today
+              </div>
+            </div>
+          </div>
 
-            {/* Trip Request Cards List */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {availableOrders.length === 0 ? (
-                <div style={{
-                  padding: '20px',
-                  textAlign: 'center',
-                  color: themeColors.subText,
-                  fontSize: '14px',
-                  backgroundColor: themeColors.cardBg,
-                  borderRadius: '16px'
-                }}>
-                  No new trip requests right now.
-                </div>
-              ) : (
-                availableOrders.map((order) => {
-                const orderId = order.id;
-                const displayId = order.trackingId || (orderId ? `#${orderId.substring(0, 6).toUpperCase()}` : '#DPARC');
-                const pickup = order.pickupAddress || order.pickupLocation || 'Pickup Location';
-                const drop = order.dropAddress || order.dropLocation || 'Drop Location';
-                const totalAmt = Number(order.totalAmount ?? order.totalPrice ?? 0);
-                const earnings = Math.round(totalAmt * 0.8);
-                const category = order.serviceType || order.category || 'EXPRESS';
+          {/* KPI 4: Partner Rating & Tier */}
+          <div className="rider-kpi-card">
+            <div style={{
+              width: '46px',
+              height: '46px',
+              borderRadius: '14px',
+              backgroundColor: 'rgba(255, 138, 0, 0.12)',
+              border: '1px solid rgba(255, 138, 0, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#FF8A00',
+              flexShrink: 0
+            }}>
+              <Star size={22} fill="#FF8A00" color="#FF8A00" />
+            </div>
+            <div>
+              <div style={{ fontSize: '22px', fontWeight: '900', color: '#FFFFFF', lineHeight: 1.1 }}>
+                ★ {stats?.rating ? Number(stats.rating).toFixed(1) : '5.0'}
+              </div>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: '#94A3B8', marginTop: '3px' }}>
+                Top Rated Delivery Partner
+              </div>
+            </div>
+          </div>
+        </section>
 
-                return (
-                  <div key={orderId} style={{
-                    backgroundColor: '#FF8A00',
-                    borderRadius: '20px',
-                    padding: '14px 16px',
-                    color: '#000000',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '10px',
-                    boxShadow: '0 6px 20px rgba(255, 138, 0, 0.3)'
-                  }}>
+        {/* ================= 3. COMMAND CENTER DUAL-COLUMN LAYOUT ================= */}
+        <div className="rider-command-grid">
+          {/* ================= COLUMN 1: DISPATCH & LIFECYCLE ACTION TERMINAL ================= */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {/* SCENARIO A: ACTIVE ORDER IN PROGRESS */}
+            {activeOrder ? (
+              <div className="rider-card rider-card-highlight">
+                {/* Header: Tracking ID + Category + Payout */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                     <div style={{
+                      backgroundColor: '#FF8A00',
+                      color: '#000000',
+                      fontWeight: '900',
+                      fontSize: '11px',
+                      padding: '4px 10px',
+                      borderRadius: '8px',
+                      letterSpacing: '0.04em'
+                    }}>
+                      MISSION ACTIVE
+                    </div>
+                    <span style={{ fontSize: '16px', fontWeight: '900', color: '#FFFFFF' }}>
+                      {activeOrder.trackingId || (`#${activeOrder.id.substring(0, 8).toUpperCase()}`)}
+                    </span>
+                  </div>
+
+                  <div style={{
+                    backgroundColor: 'rgba(255, 138, 0, 0.15)',
+                    border: '1px solid rgba(255, 138, 0, 0.4)',
+                    color: '#FF8A00',
+                    fontSize: '14px',
+                    fontWeight: '900',
+                    padding: '6px 14px',
+                    borderRadius: '12px'
+                  }}>
+                    Earn ₹{Math.round(Number(activeOrder.totalAmount ?? activeOrder.totalPrice ?? 0) * 0.8)}
+                  </div>
+                </div>
+
+                {/* Customer Contact Card */}
+                <div style={{
+                  backgroundColor: '#111D2E',
+                  border: '1px solid #1F3047',
+                  borderRadius: '16px',
+                  padding: '14px 18px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '50%',
+                      backgroundColor: 'rgba(255, 255, 255, 0.08)',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'space-between'
+                      justifyContent: 'center',
+                      color: '#FF8A00'
                     }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <Truck size={20} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '10px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase' }}>
+                        Customer Contact
+                      </div>
+                      <div style={{ fontSize: '15px', fontWeight: '800', color: '#FFFFFF', marginTop: '2px' }}>
+                        {activeOrder.customer?.firstName 
+                          ? `${activeOrder.customer.firstName} ${activeOrder.customer.lastName || ''}`.trim()
+                          : (activeOrder.customerName || 'Customer')}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Direct Phone Call Button */}
+                  {activeOrder.customer?.phone && (
+                    <a
+                      href={`tel:${activeOrder.customer.phone}`}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        backgroundColor: '#10B981',
+                        color: '#FFFFFF',
+                        padding: '8px 16px',
+                        borderRadius: '12px',
+                        textDecoration: 'none',
+                        fontWeight: '800',
+                        fontSize: '12px',
+                        boxShadow: '0 4px 14px rgba(16, 185, 129, 0.4)'
+                      }}
+                    >
+                      <Phone size={14} />
+                      <span>Call Customer</span>
+                    </a>
+                  )}
+                </div>
+
+                {/* 4-Stage Visual Delivery Stepper */}
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: '800', color: '#94A3B8', textTransform: 'uppercase', marginBottom: '8px' }}>
+                    Delivery Lifecycle Progress
+                  </div>
+
+                  <div className="rider-stepper-track">
+                    <div className="rider-stepper-line-bg" />
+                    <div 
+                      className="rider-stepper-line-active" 
+                      style={{ 
+                        width: getActiveStageIndex(activeOrder.status) === 1 ? '0%' :
+                               getActiveStageIndex(activeOrder.status) === 2 ? '33%' :
+                               getActiveStageIndex(activeOrder.status) === 3 ? '66%' : '100%' 
+                      }} 
+                    />
+
+                    {/* Step 1: Accepted */}
+                    <div className={`rider-stepper-node ${getActiveStageIndex(activeOrder.status) >= 1 ? 'completed active' : ''}`}>
+                      <div className="rider-stepper-circle">
+                        {getActiveStageIndex(activeOrder.status) > 1 ? <CheckCircle2 size={16} /> : '1'}
+                      </div>
+                      <span style={{ fontSize: '10px', fontWeight: '800', color: '#FFFFFF' }}>Accepted</span>
+                    </div>
+
+                    {/* Step 2: At Pickup */}
+                    <div className={`rider-stepper-node ${getActiveStageIndex(activeOrder.status) === 2 ? 'active' : getActiveStageIndex(activeOrder.status) > 2 ? 'completed' : ''}`}>
+                      <div className="rider-stepper-circle">
+                        {getActiveStageIndex(activeOrder.status) > 2 ? <CheckCircle2 size={16} /> : '2'}
+                      </div>
+                      <span style={{ fontSize: '10px', fontWeight: '800', color: '#FFFFFF' }}>At Pickup</span>
+                    </div>
+
+                    {/* Step 3: Picked Up */}
+                    <div className={`rider-stepper-node ${getActiveStageIndex(activeOrder.status) === 3 ? 'active' : getActiveStageIndex(activeOrder.status) > 3 ? 'completed' : ''}`}>
+                      <div className="rider-stepper-circle">
+                        {getActiveStageIndex(activeOrder.status) > 3 ? <CheckCircle2 size={16} /> : '3'}
+                      </div>
+                      <span style={{ fontSize: '10px', fontWeight: '800', color: '#FFFFFF' }}>In Transit</span>
+                    </div>
+
+                    {/* Step 4: Delivered */}
+                    <div className={`rider-stepper-node ${getActiveStageIndex(activeOrder.status) === 4 ? 'completed active' : ''}`}>
+                      <div className="rider-stepper-circle">
+                        4
+                      </div>
+                      <span style={{ fontSize: '10px', fontWeight: '800', color: '#FFFFFF' }}>Delivered</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Route Intel & Pickup / Dropoff Coordinates */}
+                <div style={{
+                  backgroundColor: '#111D2E',
+                  border: '1px solid #1F3047',
+                  borderRadius: '16px',
+                  padding: '16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '14px'
+                }}>
+                  {/* Pickup Row */}
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <div style={{
+                      width: '28px',
+                      height: '28px',
+                      borderRadius: '50%',
+                      backgroundColor: 'rgba(59, 130, 246, 0.15)',
+                      color: '#3B82F6',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      <MapPin size={16} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#3B82F6', textTransform: 'uppercase' }}>
+                        Pickup Location
+                      </div>
+                      <div style={{ fontSize: '14px', fontWeight: '800', color: '#FFFFFF', marginTop: '2px' }}>
+                        {activeOrder.pickupAddress || 'Pickup Store / Hub'}
+                      </div>
+                      {activeOrder.pickupLandmark && (
+                        <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px' }}>
+                          Landmark: {activeOrder.pickupLandmark}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ height: '1px', backgroundColor: 'rgba(255, 255, 255, 0.06)', margin: '2px 0' }} />
+
+                  {/* Dropoff Row */}
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    <div style={{
+                      width: '28px',
+                      height: '28px',
+                      borderRadius: '50%',
+                      backgroundColor: 'rgba(255, 138, 0, 0.15)',
+                      color: '#FF8A00',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0
+                    }}>
+                      <Navigation size={16} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '11px', fontWeight: '700', color: '#FF8A00', textTransform: 'uppercase' }}>
+                        Delivery Destination
+                      </div>
+                      <div style={{ fontSize: '14px', fontWeight: '800', color: '#FFFFFF', marginTop: '2px' }}>
+                        {activeOrder.dropAddress || 'Customer Destination'}
+                      </div>
+                      {activeOrder.dropLandmark && (
+                        <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '2px' }}>
+                          Landmark: {activeOrder.dropLandmark}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Payment Status Banner */}
+                {activeOrder.payment?.status === 'PAID' ? (
+                  <div style={{
+                    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                    borderRadius: '14px',
+                    padding: '12px 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    color: '#10B981',
+                    fontSize: '13px',
+                    fontWeight: '800'
+                  }}>
+                    <CheckCircle2 size={18} />
+                    <span>✓ Order is Prepaid Online — Do NOT collect cash from the customer.</span>
+                  </div>
+                ) : (
+                  <div style={{
+                    backgroundColor: 'rgba(255, 138, 0, 0.12)',
+                    border: '1px solid rgba(255, 138, 0, 0.4)',
+                    borderRadius: '14px',
+                    padding: '12px 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    color: '#FF8A00',
+                    fontSize: '13px',
+                    fontWeight: '800'
+                  }}>
+                    <AlertCircle size={18} />
+                    <span>⚠️ CASH ON DELIVERY: Collect ₹{Number(activeOrder.totalAmount ?? activeOrder.totalPrice ?? 0)} from customer.</span>
+                  </div>
+                )}
+
+                {/* PRIMARY LIFECYCLE ADVANCE ACTION BUTTON */}
+                <div>
+                  {activeOrder.status === 'ACCEPTED' && (
+                    <button
+                      onClick={() => handleAdvanceStatus(activeOrder.id, 'ARRIVED_PICKUP')}
+                      disabled={isUpdatingStatus}
+                      className="primary-orange-btn"
+                      style={{
+                        width: '100%',
+                        padding: '16px',
+                        fontSize: '15px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '10px'
+                      }}
+                    >
+                      <MapPin size={18} />
+                      <span>{isUpdatingStatus ? 'Updating...' : 'I Have Arrived at Pickup Location'}</span>
+                    </button>
+                  )}
+
+                  {activeOrder.status === 'ARRIVED_PICKUP' && (
+                    <button
+                      onClick={() => handleAdvanceStatus(activeOrder.id, 'PICKED_UP')}
+                      disabled={isUpdatingStatus}
+                      className="primary-orange-btn"
+                      style={{
+                        width: '100%',
+                        padding: '16px',
+                        fontSize: '15px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '10px'
+                      }}
+                    >
+                      <Package size={18} />
+                      <span>{isUpdatingStatus ? 'Updating...' : 'Confirm Package Picked Up & Start Delivery'}</span>
+                    </button>
+                  )}
+
+                  {['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY'].includes(activeOrder.status) && (
+                    <button
+                      onClick={() => handleAdvanceStatus(activeOrder.id, 'DELIVERED')}
+                      disabled={isUpdatingStatus}
+                      style={{
+                        width: '100%',
+                        padding: '16px',
+                        fontSize: '15px',
+                        backgroundColor: '#10B981',
+                        color: '#FFFFFF',
+                        border: 'none',
+                        borderRadius: '14px',
+                        fontWeight: '800',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '10px',
+                        boxShadow: '0 8px 24px rgba(16, 185, 129, 0.4)'
+                      }}
+                    >
+                      <CheckCircle2 size={18} />
+                      <span>{isUpdatingStatus ? 'Completing...' : 'Confirm Delivered & Complete Trip'}</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* SCENARIO B: NO ACTIVE ORDER (ONLINE FEED OR OFFLINE STANDBY) */
+              isOnline ? (
+                <div className="rider-card">
+                  {/* Feed Header */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Radio size={18} color="#FF8A00" />
+                      <h3 style={{ fontSize: '18px', fontWeight: '900', color: '#FFFFFF', margin: 0 }}>
+                        Available Delivery Requests ({availableOrders.length})
+                      </h3>
+                    </div>
+
+                    <button
+                      onClick={fetchDashboardData}
+                      disabled={refreshing}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#FF8A00',
+                        fontSize: '13px',
+                        fontWeight: '700',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+                      <span>Refresh Feed</span>
+                    </button>
+                  </div>
+
+                  {/* Available Orders List OR Live Radar Scanner */}
+                  {availableOrders.length === 0 ? (
+                    <div style={{
+                      backgroundColor: '#111D2E',
+                      border: '1px dashed #1F3047',
+                      borderRadius: '18px',
+                      padding: '36px 20px',
+                      textAlign: 'center',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      {/* Radar Pulse Animation */}
+                      <div className="radar-scanner-box">
+                        <div className="radar-ring" />
+                        <div className="radar-ring" />
+                        <div className="radar-ring" />
                         <div style={{
-                          width: '36px',
-                          height: '36px',
+                          width: '44px',
+                          height: '44px',
                           borderRadius: '50%',
-                          backgroundColor: 'rgba(0,0,0,0.15)',
+                          backgroundColor: '#FF8A00',
                           display: 'flex',
                           alignItems: 'center',
-                          justifyContent: 'center'
+                          justifyContent: 'center',
+                          color: '#000000',
+                          boxShadow: '0 0 20px rgba(255, 138, 0, 0.7)',
+                          zIndex: 5
                         }}>
-                          <Truck size={18} color="#000000" />
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '14px', fontWeight: '900', color: '#000000' }}>{displayId}</div>
-                          <div style={{ fontSize: '11px', fontWeight: '700', color: 'rgba(0,0,0,0.7)' }}>{t('earnings')} - ₹{earnings}</div>
+                          <Truck size={22} />
                         </div>
                       </div>
 
-                      <button
-                        onClick={() => handleAcceptOrder(orderId)}
-                        style={{
-                          backgroundColor: '#000000',
-                          border: 'none',
-                          color: '#FFFFFF',
-                          fontSize: '12px',
-                          fontWeight: '800',
-                          padding: '8px 18px',
-                          borderRadius: '16px',
-                          cursor: 'pointer',
-                          boxShadow: '0 4px 10px rgba(0,0,0,0.3)'
-                        }}
-                      >
-                        {t('accept')}
-                      </button>
+                      <h4 style={{ fontSize: '17px', fontWeight: '800', color: '#FFFFFF', margin: '8px 0 4px 0' }}>
+                        Scanning Adoni Delivery Hub for Requests...
+                      </h4>
+                      <p style={{ fontSize: '12px', color: '#94A3B8', margin: 0, maxWidth: '380px', lineHeight: 1.5 }}>
+                        You are online and ready. When customer orders are submitted in Adoni, they will appear here in real-time.
+                      </p>
+
+                      <div style={{
+                        marginTop: '16px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        border: '1px solid rgba(16, 185, 129, 0.3)',
+                        padding: '6px 14px',
+                        borderRadius: '20px',
+                        fontSize: '11px',
+                        fontWeight: '700',
+                        color: '#10B981'
+                      }}>
+                        <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#10B981' }} />
+                        <span>Live Socket Connected • Instant Dispatch Active</span>
+                      </div>
                     </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                      {availableOrders.map((order) => {
+                        const totalAmt = Number(order.totalAmount ?? order.totalPrice ?? 0);
+                        const earnings = Math.round(totalAmt * 0.8);
+                        const displayId = order.trackingId || (`#${order.id.substring(0, 8).toUpperCase()}`);
+                        const isAccepting = isAcceptingId === order.id;
 
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      fontSize: '11px',
-                      fontWeight: '700',
-                      color: '#000000',
-                      borderTop: '1px solid rgba(0,0,0,0.12)',
-                      paddingTop: '8px',
-                      gap: '8px'
-                    }}>
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '38%' }}>{pickup}</span>
-                      <span style={{ backgroundColor: 'rgba(0,0,0,0.15)', padding: '2px 8px', borderRadius: '10px', flexShrink: 0 }}>{category}</span>
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '38%', textAlign: 'right' }}>{drop}</span>
+                        return (
+                          <div key={order.id} className="rider-order-item">
+                            {/* Card Header: Tracking ID + Category + Payout */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <div style={{
+                                  backgroundColor: 'rgba(255, 138, 0, 0.15)',
+                                  color: '#FF8A00',
+                                  padding: '4px 10px',
+                                  borderRadius: '8px',
+                                  fontSize: '11px',
+                                  fontWeight: '800'
+                                }}>
+                                  {order.serviceType || 'PARCEL EXPRESS'}
+                                </div>
+                                <span style={{ fontSize: '14px', fontWeight: '900', color: '#FFFFFF' }}>
+                                  {displayId}
+                                </span>
+                              </div>
+
+                              <div style={{ fontSize: '18px', fontWeight: '900', color: '#FF8A00' }}>
+                                ₹{earnings} <span style={{ fontSize: '11px', color: '#94A3B8' }}>(Payout)</span>
+                              </div>
+                            </div>
+
+                            {/* Addresses Snippet */}
+                            <div style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '6px',
+                              backgroundColor: '#0D1624',
+                              padding: '12px 14px',
+                              borderRadius: '12px',
+                              border: '1px solid #1A273B'
+                            }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#3B82F6', flexShrink: 0 }} />
+                                <span style={{ fontSize: '12px', color: '#94A3B8' }}>From:</span>
+                                <span style={{ fontSize: '13px', fontWeight: '700', color: '#FFFFFF', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {order.pickupAddress || 'Pickup Point'}
+                                </span>
+                              </div>
+
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#FF8A00', flexShrink: 0 }} />
+                                <span style={{ fontSize: '12px', color: '#94A3B8' }}>To:</span>
+                                <span style={{ fontSize: '13px', fontWeight: '700', color: '#FFFFFF', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {order.dropAddress || 'Destination'}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Accept Button & Distance Chip */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <div style={{ fontSize: '12px', color: '#94A3B8', fontWeight: '700' }}>
+                                Distance: {order.distanceKm ? `${order.distanceKm} km` : 'Adoni Local'}
+                              </div>
+
+                              <button
+                                onClick={() => handleAcceptOrder(order.id)}
+                                disabled={isAccepting}
+                                className="primary-orange-btn"
+                                style={{
+                                  padding: '10px 22px',
+                                  fontSize: '13px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: '8px'
+                                }}
+                              >
+                                <span>{isAccepting ? 'Claiming...' : 'ACCEPT DELIVERY'}</span>
+                                <ArrowRight size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  </div>
-                );
-              })
-              )}
-            </div>
-          </div>
-
-          {/* 6. QUICK ACTIONS ROW */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: '8px',
-            width: '100%',
-            marginTop: '4px'
-          }}>
-            {/* Quick Action 1: Fuel Prices */}
-            <div 
-              onClick={() => setShowFuelModal(true)}
-              style={{
-                backgroundColor: themeColors.cardBg,
-                border: `1px solid ${themeColors.border}`,
-                borderRadius: '14px',
-                padding: '10px 4px',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                textAlign: 'center',
-                cursor: 'pointer'
-              }}
-            >
-              <div style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '10px',
-                backgroundColor: 'rgba(255, 138, 0, 0.12)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#FF8A00',
-                marginBottom: '4px'
-              }}>
-                <Fuel size={16} />
-              </div>
-              <span style={{ fontSize: '10px', fontWeight: '700', color: themeColors.text }}>{t('fuelPrices')}</span>
-            </div>
-
-            {/* Quick Action 2: SOS */}
-            <div 
-              onClick={() => setShowSosModal(true)}
-              style={{
-                backgroundColor: themeColors.cardBg,
-                border: `1px solid ${themeColors.border}`,
-                borderRadius: '14px',
-                padding: '10px 4px',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                textAlign: 'center',
-                cursor: 'pointer'
-              }}
-            >
-              <div style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '10px',
-                backgroundColor: 'rgba(239, 68, 68, 0.15)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#EF4444',
-                marginBottom: '4px'
-              }}>
-                <AlertTriangle size={16} />
-              </div>
-              <span style={{ fontSize: '10px', fontWeight: '700', color: themeColors.text }}>{t('sosAlert')}</span>
-            </div>
-
-            {/* Quick Action 3: Refer & Earn */}
-            <div 
-              onClick={() => setShowReferModal(true)}
-              style={{
-                backgroundColor: themeColors.cardBg,
-                border: `1px solid ${themeColors.border}`,
-                borderRadius: '14px',
-                padding: '10px 4px',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                textAlign: 'center',
-                cursor: 'pointer'
-              }}
-            >
-              <div style={{
-                width: '32px',
-                height: '32px',
-                borderRadius: '10px',
-                backgroundColor: 'rgba(255, 138, 0, 0.12)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#FF8A00',
-                marginBottom: '4px'
-              }}>
-                <Gift size={16} />
-              </div>
-              <span style={{ fontSize: '10px', fontWeight: '700', color: themeColors.text }}>{t('referEarn')}</span>
-            </div>
-          </div>
-
-        </div>
-
-        {/* ================= MODAL 1: FUEL PRICES MODAL ================= */}
-        {showFuelModal && (
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: themeColors.modalOverlay,
-            backdropFilter: 'blur(10px)',
-            zIndex: 50,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '16px'
-          }}>
-            <div style={{
-              width: '100%',
-              backgroundColor: themeColors.modalBg,
-              border: `1px solid ${themeColors.border}`,
-              borderRadius: '20px',
-              padding: '20px',
-              boxShadow: '0 20px 40px rgba(0,0,0,0.95)',
-              maxHeight: '90vh',
-              overflowY: 'auto'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Fuel size={22} color="#FF8A00" />
-                  <div>
-                    <h3 style={{ fontSize: '17px', fontWeight: '800', color: themeColors.text, margin: 0 }}>
-                      {t('fuelPrices')}
-                    </h3>
-                    <div style={{ fontSize: '10px', color: themeColors.subText }}>Adoni, AP • Updated 6:00 AM</div>
-                  </div>
+                  )}
                 </div>
-
-                <button onClick={() => setShowFuelModal(false)} style={{ background: 'none', border: 'none', color: themeColors.subText, cursor: 'pointer', padding: '4px' }}>
-                  <X size={20} />
-                </button>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
-                <div style={{ backgroundColor: themeColors.cardBg, border: `1px solid ${themeColors.border}`, borderRadius: '14px', padding: '14px 12px' }}>
-                  <div style={{ fontSize: '11px', color: themeColors.subText, fontWeight: '700' }}>⛽ PETROL</div>
-                  <div style={{ fontSize: '20px', fontWeight: '900', color: '#FF8A00', margin: '4px 0 2px 0' }}>₹109.45</div>
-                  <div style={{ fontSize: '10px', color: '#10B981', fontWeight: '700' }}>▼ -₹0.15 / L</div>
-                </div>
-
-                <div style={{ backgroundColor: themeColors.cardBg, border: `1px solid ${themeColors.border}`, borderRadius: '14px', padding: '14px 12px' }}>
-                  <div style={{ fontSize: '11px', color: themeColors.subText, fontWeight: '700' }}>🛢️ DIESEL</div>
-                  <div style={{ fontSize: '20px', fontWeight: '900', color: themeColors.text, margin: '4px 0 2px 0' }}>₹97.20</div>
-                  <div style={{ fontSize: '10px', color: themeColors.subText, fontWeight: '700' }}>• Stable / L</div>
-                </div>
-              </div>
-
-              <button onClick={() => setShowFuelModal(false)} className="primary-orange-btn" style={{ width: '100%', padding: '12px', fontSize: '14px' }}>
-                Done
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ================= MODAL 2: REFER & EARN MODAL ================= */}
-        {showReferModal && (
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: themeColors.modalOverlay,
-            backdropFilter: 'blur(10px)',
-            zIndex: 50,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '16px'
-          }}>
-            <div style={{
-              width: '100%',
-              backgroundColor: themeColors.modalBg,
-              border: `1px solid ${themeColors.border}`,
-              borderRadius: '22px',
-              padding: '22px',
-              boxShadow: '0 20px 40px rgba(0,0,0,0.95)',
-              textAlign: 'center'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button onClick={() => setShowReferModal(false)} style={{ background: 'none', border: 'none', color: themeColors.subText, cursor: 'pointer' }}>
-                  <X size={20} />
-                </button>
-              </div>
-
-              <div style={{ width: '60px', height: '60px', borderRadius: '50%', backgroundColor: 'rgba(255, 138, 0, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px auto', color: '#FF8A00' }}>
-                <Gift size={32} />
-              </div>
-
-              <h3 style={{ fontSize: '19px', fontWeight: '900', color: themeColors.text, margin: '0 0 4px 0' }}>
-                {t('referEarn')}
-              </h3>
-              <p style={{ fontSize: '12px', color: themeColors.subText, margin: '0 0 16px 0', lineHeight: '1.4' }}>
-                Earn ₹100 for every rider partner who registers with your code!
-              </p>
-
-              {/* Referral Code Box */}
-              <div style={{ backgroundColor: themeColors.cardBg, border: '1px dashed #FF8A00', borderRadius: '14px', padding: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <span style={{ fontSize: '16px', fontWeight: '900', color: '#FF8A00', letterSpacing: '0.08em' }}>DPARCSREENU100</span>
-                <button onClick={handleCopyCode} style={{ backgroundColor: '#FF8A00', color: '#000000', border: 'none', borderRadius: '8px', padding: '6px 12px', fontSize: '12px', fontWeight: '800', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  {copied ? <Check size={14} /> : <Copy size={14} />}
-                  <span>{copied ? 'Copied!' : 'Copy'}</span>
-                </button>
-              </div>
-
-              <button onClick={() => setShowReferModal(false)} className="primary-orange-btn" style={{ width: '100%', padding: '12px', fontSize: '14px' }}>
-                Done
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ================= MODAL 3: EMERGENCY SOS MODAL ================= */}
-        {showSosModal && (
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: themeColors.modalOverlay,
-            backdropFilter: 'blur(10px)',
-            zIndex: 50,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '16px'
-          }}>
-            <div style={{
-              width: '100%',
-              backgroundColor: themeColors.modalBg,
-              border: '1px solid #EF4444',
-              borderRadius: '22px',
-              padding: '22px',
-              boxShadow: '0 20px 40px rgba(0,0,0,0.95)',
-              textAlign: 'center'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button onClick={() => setShowSosModal(false)} style={{ background: 'none', border: 'none', color: themeColors.subText, cursor: 'pointer' }}>
-                  <X size={20} />
-                </button>
-              </div>
-
-              <div style={{ width: '60px', height: '60px', borderRadius: '50%', backgroundColor: 'rgba(239, 68, 68, 0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px auto', color: '#EF4444' }}>
-                <ShieldAlert size={32} />
-              </div>
-
-              <h3 style={{ fontSize: '19px', fontWeight: '900', color: '#EF4444', margin: '0 0 4px 0' }}>
-                Emergency SOS
-              </h3>
-              <p style={{ fontSize: '12px', color: themeColors.subText, margin: '0 0 16px 0' }}>
-                Need urgent help? Click below to call 24/7 Police & Safety Helpline.
-              </p>
-
-              <a
-                href="tel:112"
-                style={{
-                  width: '100%',
-                  padding: '14px',
-                  backgroundColor: '#EF4444',
-                  color: '#FFFFFF',
-                  borderRadius: '14px',
-                  textDecoration: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '8px',
-                  fontWeight: '900',
-                  fontSize: '15px',
-                  marginBottom: '10px',
-                  boxShadow: '0 4px 14px rgba(239, 68, 68, 0.4)'
-                }}
-              >
-                <Phone size={18} />
-                <span>Call Emergency Helpline (112)</span>
-              </a>
-
-              <button onClick={() => setShowSosModal(false)} style={{ backgroundColor: themeColors.cardBg, border: `1px solid ${themeColors.border}`, color: themeColors.text, width: '100%', padding: '12px', borderRadius: '14px', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ================= MODAL 4: SERVICE AREA MAP MODAL ================= */}
-        {showMapModal && (
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: themeColors.modalOverlay,
-            backdropFilter: 'blur(10px)',
-            zIndex: 50,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '12px'
-          }}>
-            <div style={{
-              width: '100%',
-              backgroundColor: themeColors.modalBg,
-              border: `1px solid ${themeColors.border}`,
-              borderRadius: '20px',
-              padding: '16px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '12px',
-              boxShadow: '0 20px 40px rgba(0,0,0,0.85)',
-              maxHeight: '94vh',
-              overflowY: 'auto'
-            }}>
-              {/* Modal Header */}
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <MapPin size={20} color="#FF8A00" />
-                  <h3 style={{ fontSize: '17px', fontWeight: '800', color: themeColors.text, margin: 0 }}>
-                    {t('serviceArea')}
-                  </h3>
-                </div>
-
-                <button
-                  onClick={() => setShowMapModal(false)}
-                  style={{
-                    width: '32px',
-                    height: '32px',
+              ) : (
+                /* OFFLINE STANDBY CARD */
+                <div className="rider-card" style={{ textAlign: 'center', padding: '40px 24px' }}>
+                  <div style={{
+                    width: '64px',
+                    height: '64px',
                     borderRadius: '50%',
-                    backgroundColor: themeColors.cardSecondary,
-                    border: `1px solid ${themeColors.border}`,
-                    color: themeColors.subText,
+                    backgroundColor: 'rgba(239, 68, 68, 0.12)',
+                    border: '2px solid #EF4444',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    cursor: 'pointer'
-                  }}
-                >
-                  <X size={16} />
-                </button>
+                    color: '#EF4444',
+                    margin: '0 auto 16px auto'
+                  }}>
+                    <Power size={32} />
+                  </div>
+
+                  <h3 style={{ fontSize: '20px', fontWeight: '900', color: '#FFFFFF', margin: '0 0 6px 0' }}>
+                    You Are Currently Offline
+                  </h3>
+                  <p style={{ fontSize: '13px', color: '#94A3B8', margin: '0 0 20px 0', maxWidth: '360px', marginInline: 'auto', lineHeight: 1.5 }}>
+                    Turn online to connect to the Adoni Dispatch Hub and start receiving real delivery requests.
+                  </p>
+
+                  <button
+                    onClick={handleToggleOnline}
+                    className="primary-orange-btn"
+                    style={{
+                      padding: '14px 32px',
+                      fontSize: '14px',
+                      margin: '0 auto',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}
+                  >
+                    <Power size={16} />
+                    <span>Go Online Now</span>
+                  </button>
+                </div>
+              )
+            )}
+          </div>
+
+          {/* ================= COLUMN 2: LIVE MAP & FLEET INTEL ================= */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {/* Interactive Route Map Card */}
+            <div className="rider-card" style={{ padding: '18px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Navigation size={18} color="#FF8A00" />
+                  <h4 style={{ fontSize: '16px', fontWeight: '900', color: '#FFFFFF', margin: 0 }}>
+                    Live GPS & Navigation Route
+                  </h4>
+                </div>
+
+                <div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: '700' }}>
+                  Adoni Hub Region
+                </div>
               </div>
 
-              {/* Zone Legend Row */}
+              {/* Map Canvas */}
+              <div style={{
+                width: '100%',
+                height: '360px',
+                borderRadius: '16px',
+                overflow: 'hidden',
+                border: '1px solid #1E2D42',
+                position: 'relative'
+              }}>
+                <RealMap
+                  riderPos={riderPos}
+                  pickupPos={pickupCoords}
+                  dropPos={dropCoords}
+                  routePoints={[pickupCoords, dropCoords]}
+                  showServiceZones={!activeOrder}
+                  onRecenter={() => setRiderPos(defaultRiderPos)}
+                />
+              </div>
+
+              {/* External Google Maps Turn-by-Turn Button */}
+              {activeOrder ? (
+                <a
+                  href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(activeOrder.pickupAddress || 'Adoni')}&destination=${encodeURIComponent(activeOrder.dropAddress || 'Adoni')}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    backgroundColor: '#111D2E',
+                    border: '1px solid #1F3047',
+                    borderRadius: '12px',
+                    padding: '12px',
+                    color: '#FF8A00',
+                    fontWeight: '800',
+                    fontSize: '13px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    textDecoration: 'none',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  <ExternalLink size={16} />
+                  <span>Launch Google Maps Turn-by-Turn GPS</span>
+                </a>
+              ) : (
+                <div style={{
+                  fontSize: '12px',
+                  color: '#94A3B8',
+                  textAlign: 'center',
+                  padding: '8px 0'
+                }}>
+                  Showing active delivery zones around Adoni Station & Town Hub
+                </div>
+              )}
+            </div>
+
+            {/* Rider Station & Vehicle Card */}
+            <div className="rider-card">
+              <h4 style={{ fontSize: '15px', fontWeight: '900', color: '#FFFFFF', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <ShieldCheck size={18} color="#FF8A00" />
+                <span>Station & Fleet Details</span>
+              </h4>
+
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '12px',
+                backgroundColor: '#111D2E',
+                border: '1px solid #1F3047',
+                borderRadius: '14px',
+                padding: '14px'
+              }}>
+                <div>
+                  <div style={{ fontSize: '10px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase' }}>
+                    Registered Vehicle
+                  </div>
+                  <div style={{ fontSize: '13px', fontWeight: '800', color: '#FFFFFF', marginTop: '2px' }}>
+                    {user?.riderProfile?.vehicleType?.toUpperCase() || 'MOTORCYCLE'}
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#FF8A00', fontWeight: '700', marginTop: '1px' }}>
+                    {user?.riderProfile?.vehicleNumber || 'AP 21 REG'}
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: '10px', fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase' }}>
+                    Operating Station
+                  </div>
+                  <div style={{ fontSize: '13px', fontWeight: '800', color: '#FFFFFF', marginTop: '2px' }}>
+                    Adoni Central
+                  </div>
+                  <div style={{ fontSize: '11px', color: '#10B981', fontWeight: '700', marginTop: '1px' }}>
+                    Active Hub
+                  </div>
+                </div>
+              </div>
+
+              {/* Hub Dispatch Helpline */}
               <div style={{
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                backgroundColor: themeColors.cardBg,
-                padding: '8px 12px',
-                borderRadius: '12px',
-                fontSize: '11px',
-                fontWeight: '700',
-                color: themeColors.text
+                padding: '4px 0'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#FF8A00' }} />
-                  <span>{t('busyZone')}</span>
+                <div style={{ fontSize: '12px', color: '#94A3B8' }}>
+                  Need assistance on the road?
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#3B82F6' }} />
-                  <span>{t('pickupAreas')}</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <span style={{ width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#10B981' }} />
-                  <span>{t('dropAreas')}</span>
-                </div>
+                <a
+                  href="tel:1800123456"
+                  style={{
+                    color: '#FF8A00',
+                    fontSize: '12px',
+                    fontWeight: '800',
+                    textDecoration: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <Phone size={13} />
+                  <span>Call Dispatcher</span>
+                </a>
               </div>
-
-              {/* Real Leaflet Service Map View */}
-              <div style={{
-                width: '100%',
-                height: '240px',
-                borderRadius: '16px',
-                overflow: 'hidden',
-                position: 'relative',
-                border: `1px solid ${themeColors.border}`
-              }}>
-                <RealMap
-                  riderPos={riderPos}
-                  pickupPos={pickupPos}
-                  dropPos={dropPos}
-                  routePoints={routePoints}
-                  showServiceZones={true}
-                  onRecenter={() => setRiderPos([15.6322, 77.2728])}
-                />
-              </div>
-
-              {/* 3 Summary Statistic Cards */}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: '8px'
-              }}>
-                <div style={{
-                  backgroundColor: themeColors.cardBg,
-                  border: '1px solid rgba(255, 138, 0, 0.3)',
-                  borderRadius: '12px',
-                  padding: '10px 6px',
-                  textAlign: 'center'
-                }}>
-                  <div style={{ fontSize: '16px', fontWeight: '900', color: '#FF8A00' }}>12</div>
-                  <div style={{ fontSize: '10px', fontWeight: '700', color: themeColors.text, marginTop: '2px' }}>{t('busyZonesCount')}</div>
-                </div>
-
-                <div style={{
-                  backgroundColor: themeColors.cardBg,
-                  border: '1px solid rgba(59, 130, 246, 0.3)',
-                  borderRadius: '12px',
-                  padding: '10px 6px',
-                  textAlign: 'center'
-                }}>
-                  <div style={{ fontSize: '16px', fontWeight: '900', color: '#3B82F6' }}>8</div>
-                  <div style={{ fontSize: '10px', fontWeight: '700', color: themeColors.text, marginTop: '2px' }}>{t('pickupAreas')}</div>
-                </div>
-
-                <div style={{
-                  backgroundColor: themeColors.cardBg,
-                  border: '1px solid rgba(16, 185, 129, 0.3)',
-                  borderRadius: '12px',
-                  padding: '10px 6px',
-                  textAlign: 'center'
-                }}>
-                  <div style={{ fontSize: '16px', fontWeight: '900', color: '#10B981' }}>6</div>
-                  <div style={{ fontSize: '10px', fontWeight: '700', color: themeColors.text, marginTop: '2px' }}>{t('dropAreas')}</div>
-                </div>
-              </div>
-
-              {/* Close Button */}
-              <button
-                onClick={() => setShowMapModal(false)}
-                className="primary-orange-btn"
-                style={{ width: '100%', padding: '12px', fontSize: '14px', borderRadius: '12px' }}
-              >
-                {t('closeMap')}
-              </button>
             </div>
           </div>
-        )}
-
-        {/* ================= MODAL 5: NOTIFICATIONS MODAL ================= */}
-        {showNotificationModal && (
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: themeColors.modalOverlay,
-            backdropFilter: 'blur(10px)',
-            zIndex: 50,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '16px'
-          }}>
-            <div style={{
-              width: '100%',
-              backgroundColor: themeColors.modalBg,
-              border: `1px solid ${themeColors.border}`,
-              borderRadius: '22px',
-              padding: '20px',
-              boxShadow: '0 20px 40px rgba(0,0,0,0.95)'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Bell size={20} color="#FF8A00" />
-                  <h3 style={{ fontSize: '17px', fontWeight: '800', color: themeColors.text, margin: 0 }}>
-                    Notifications
-                  </h3>
-                </div>
-
-                <button onClick={() => setShowNotificationModal(false)} style={{ background: 'none', border: 'none', color: themeColors.subText, cursor: 'pointer' }}>
-                  <X size={20} />
-                </button>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '16px' }}>
-                <div style={{ backgroundColor: themeColors.cardBg, borderRadius: '12px', padding: '12px' }}>
-                  <div style={{ fontSize: '13px', fontWeight: '800', color: themeColors.text }}>🎉 Bonus Payout Credited!</div>
-                  <div style={{ fontSize: '11px', color: themeColors.subText, marginTop: '2px' }}>₹100 Referral bonus added to wallet.</div>
-                </div>
-
-                <div style={{ backgroundColor: themeColors.cardBg, borderRadius: '12px', padding: '12px' }}>
-                  <div style={{ fontSize: '13px', fontWeight: '800', color: themeColors.text }}>🔥 High Demand Alert</div>
-                  <div style={{ fontSize: '11px', color: themeColors.subText, marginTop: '2px' }}>High order surge near Adoni Hub.</div>
-                </div>
-              </div>
-
-              <button onClick={() => setShowNotificationModal(false)} className="primary-orange-btn" style={{ width: '100%', padding: '12px', fontSize: '14px' }}>
-                Done
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ================= MODAL 6: TODAY EARNINGS MODAL ================= */}
-        {showEarningsModal && (
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: themeColors.modalOverlay,
-            backdropFilter: 'blur(10px)',
-            zIndex: 50,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: '16px'
-          }}>
-            <div style={{
-              width: '100%',
-              backgroundColor: themeColors.modalBg,
-              border: `1px solid ${themeColors.border}`,
-              borderRadius: '22px',
-              padding: '20px',
-              boxShadow: '0 20px 40px rgba(0,0,0,0.95)'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                <h3 style={{ fontSize: '17px', fontWeight: '800', color: themeColors.text, margin: 0 }}>
-                  {t('todayEarnings')} Breakdown
-                </h3>
-                <button onClick={() => setShowEarningsModal(false)} style={{ background: 'none', border: 'none', color: themeColors.subText, cursor: 'pointer' }}>
-                  <X size={20} />
-                </button>
-              </div>
-
-              <div style={{ backgroundColor: 'rgba(255, 138, 0, 0.1)', border: '1px solid rgba(255, 138, 0, 0.3)', borderRadius: '16px', padding: '16px', textAlign: 'center', marginBottom: '16px' }}>
-                <div style={{ fontSize: '11px', color: themeColors.subText, textTransform: 'uppercase' }}>Total Net Earnings</div>
-                <div style={{ fontSize: '32px', fontWeight: '900', color: '#FF8A00', margin: '4px 0' }}>₹860.00</div>
-                <div style={{ fontSize: '11px', color: '#10B981', fontWeight: '700' }}>✓ 25 Completed Trips</div>
-              </div>
-
-              <button onClick={() => setShowEarningsModal(false)} className="primary-orange-btn" style={{ width: '100%', padding: '12px', fontSize: '14px' }}>
-                Done
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* ================= 9. FIXED BOTTOM NAVIGATION BAR ================= */}
-        <div style={{
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: '64px',
-          backgroundColor: themeColors.navBg,
-          borderTop: `1px solid ${themeColors.border}`,
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          alignItems: 'center',
-          zIndex: 30
-        }}>
-          {/* Tab 1: Home (Active) */}
-          <button
-            onClick={() => navigate('/home')}
-            style={{
-              background: 'none',
-              border: 'none',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '4px',
-              cursor: 'pointer',
-              color: '#FF8A00'
-            }}
-          >
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: '2px',
-              width: '18px',
-              height: '18px'
-            }}>
-              <div style={{ backgroundColor: '#FF8A00', borderRadius: '2px' }} />
-              <div style={{ backgroundColor: '#FF8A00', borderRadius: '2px' }} />
-              <div style={{ backgroundColor: '#FF8A00', borderRadius: '2px' }} />
-              <div style={{ backgroundColor: '#FF8A00', borderRadius: '2px' }} />
-            </div>
-            <span style={{ fontSize: '11px', fontWeight: '800' }}>{t('home')}</span>
-          </button>
-
-          {/* Tab 2: History */}
-          <button
-            onClick={() => navigate('/history')}
-            style={{
-              background: 'none',
-              border: 'none',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '4px',
-              cursor: 'pointer',
-              color: themeColors.subText
-            }}
-          >
-            <Package size={18} color={themeColors.subText} />
-            <span style={{ fontSize: '11px', fontWeight: '700' }}>{t('history')}</span>
-          </button>
-
-          {/* Tab 3: Profile */}
-          <button
-            onClick={() => navigate('/profile')}
-            style={{
-              background: 'none',
-              border: 'none',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '4px',
-              cursor: 'pointer',
-              color: themeColors.subText
-            }}
-          >
-            <User size={18} color={themeColors.subText} />
-            <span style={{ fontSize: '11px', fontWeight: '700' }}>{t('profile')}</span>
-          </button>
         </div>
-
-      </div>
+      </main>
     </div>
   );
 };

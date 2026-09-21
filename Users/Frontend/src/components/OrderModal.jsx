@@ -854,6 +854,28 @@ export const OrderModal = ({ isOpen, serviceType, onClose, onNavigateOrders }) =
                 }}>
                   <i className="fa-solid fa-circle-exclamation" style={{ fontSize: 16, flexShrink: 0 }}></i>
                   <span style={{ flex: 1 }}>{orderError}</span>
+                  {orderError.toLowerCase().includes('active') && onNavigateOrders && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onClose();
+                        onNavigateOrders();
+                      }}
+                      style={{
+                        background: '#FF8800',
+                        color: '#000000',
+                        border: 'none',
+                        borderRadius: 8,
+                        padding: '5px 10px',
+                        fontSize: 11,
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      View Active Order
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => setOrderError('')}
